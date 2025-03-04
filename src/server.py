@@ -1,5 +1,6 @@
 import os
 import logging
+import dotenv
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
@@ -10,8 +11,9 @@ import cv2
 import shutil
 from enum import StrEnum
 
-INPUT_PATH: str = "/input"
-OUTPUT_PATH: str = "/output"
+dotenv.load_dotenv()
+INPUT_PATH: str = os.getenv("INPUT", "/input")
+OUTPUT_PATH: str = os.getenv("OUTPUT", "/output")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 busy = False
@@ -181,6 +183,17 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 @app.get("/", response_class=HTMLResponse)
 def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/dirs")
+def get_dirs(subfolder: str = ""):
+    print(f"Getting dirs for {subfolder}")
+    try:
+        dirs = os.listdir(f"{OUTPUT_PATH}/{subfolder}")
+    except FileNotFoundError:
+        dirs = []
+    print(f"Dirs: {dirs}")
+    return dirs
 
 
 @app.websocket("/ws/reorganizer")

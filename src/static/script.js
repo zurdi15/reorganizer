@@ -1,11 +1,15 @@
 document.addEventListener("DOMContentLoaded", function () {
   const logsDiv = document.getElementById("logs");
   const form = document.querySelector("form");
+  const pathInput = document.getElementById("path");
+  const pathInputSuggestions = document.getElementById("path-input-suggestions");
   const processed = document.getElementById("processed-count");
   const pictures = document.getElementById("pictures-count");
   const videos = document.getElementById("videos-count");
   const errors = document.getElementById("errors-count");
   let ws;
+  let typingTimer;
+  const typingDelay = 1000;
 
   function connectWebSocket() {
     ws = new WebSocket(`ws://${window.location.host}/ws/reorganizer`);
@@ -23,14 +27,11 @@ document.addEventListener("DOMContentLoaded", function () {
           ""
         )}\n\n`;
         logsDiv.scrollTop = logsDiv.scrollHeight;
-      }
-      else if (event.data.includes("event-processed-pictures:")) {
+      } else if (event.data.includes("event-processed-pictures:")) {
         updateProcessedPictures();
-      }
-      else if (event.data.includes("event-processed-videos:")) {
+      } else if (event.data.includes("event-processed-videos:")) {
         updateProcessedVideos();
-      }
-      else if (event.data.includes("event-error:")) {
+      } else if (event.data.includes("event-error:")) {
         updateErrors();
         logsDiv.innerHTML += `${event.data.replace("event-error:", "")}\n\n`;
         logsDiv.scrollTop = logsDiv.scrollHeight;
@@ -51,6 +52,26 @@ document.addEventListener("DOMContentLoaded", function () {
       setTimeout(connectWebSocket, 1000); // Intenta reconectar tras 1 segundo
     };
   }
+
+  pathInput.addEventListener("input", function (event) {
+    clearTimeout(typingTimer);
+    const path = event.target.value;
+    typingTimer = setTimeout(() => {
+      fetch(
+        `${window.location.protocol}dirs?subfolder=${encodeURIComponent(path)}`
+      )
+        .then((response) => response.json())
+        .then((data) => {
+          pathInputSuggestions.innerHTML = '';
+          data.forEach(dir => {
+            pathInputSuggestions.innerHTML += `<div class='helper-text'>${dir}</div>`
+          });
+        })
+        .catch((error) => {
+          console.error("Error fetching subfolder data:", error);
+        });
+    }, typingDelay);
+  });
 
   form.addEventListener("submit", function (event) {
     event.preventDefault();
