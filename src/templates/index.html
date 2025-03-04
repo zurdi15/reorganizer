@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Reorganizer</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css"
+    />
+    <style>
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #2196f3;
+        color: white;
+      }
+      .header img {
+        margin-right: 10px;
+      }
+      .container {
+        margin-top: 20px;
+        width: 80%;
+      }
+      .logs {
+        white-space: pre-wrap;
+        border: 1px solid #000;
+        height: calc(100dvh - 240px) !important;
+        overflow-y: scroll;
+        margin-top: 10px;
+        padding: 10px;
+      }
+      .logs-title {
+        margin-top: 0px;
+        align-content: center;
+      }
+      .logs-header {
+        display: flex;
+        align-items: center;
+      }
+      .logs-header h5 {
+        margin-right: 20px;
+      }
+      .errors {
+        background-color: #ffa5a5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <img height="40px" src="/static/logo.svg" />
+      <h2>Reorganizer</h2>
+    </div>
+    <div class="container">
+      <div class="row">
+        <form class="col s6">
+          <div class="row">
+            <div class="input-field col s12">
+              <input id="year" type="number" name="year" />
+              <label for="year">Year e.g.: [2025]</label>
+            </div>
+          </div>
+          <div class="row">
+            <div class="input-field col s12">
+              <input id="month" type="number" name="month" />
+              <label for="month">Month (optional) e.g.: [2]</label>
+            </div>
+          </div>
+          <div class="row">
+            <div class="input-field col s12">
+              <input id="path" type="text" name="path" />
+              <label for="path">Path e.g.: [hungary/budapest/hermanos]</label>
+            </div>
+          </div>
+          <button
+            class="btn waves-effect waves-light"
+            type="submit"
+            name="action"
+          >
+            Organize!
+            <i class="material-icons right">send</i>
+          </button>
+        </form>
+        <div class="col s6">
+          <div class="logs-header">
+            <span class="chip">
+              <span class="chip">
+                Processed: <span id="processed-count">0</span> /
+                <span id="total-files">0</span><br />
+              </span>
+              <span class="chip">
+                Pictures: <span id="pictures-count">0</span><br />
+              </span>
+              <span class="chip">
+                Videos: <span id="videos-count">0</span>
+              </span>
+              <span class="chip unknown"
+                >Unknown: <span id="unknown-count">0</span></span
+              >
+            </span>
+            <span class="chip errors"
+              >Errors: <span id="errors-count">0</span></span
+            >
+          </div>
+          <div id="logs" class="logs"></div>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script src="/static/script.js"></script>
+  </body>
+</html>

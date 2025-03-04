@@ -1,0 +1,28 @@
+FROM python:3.11-slim
+
+# Install dependencies for OpenCV
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0
+
+WORKDIR /app
+
+# Copy the requirements file into the container
+COPY requirements.txt .
+
+# Install the dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create necessary directories
+RUN mkdir -p /app/src/static /app/src/templates
+COPY src/static /app/src/static
+COPY src/templates /app/src/templates
+
+# Copy the FastAPI app code into the container
+COPY . .
+
+# Expose the port the app runs on
+EXPOSE 8000
+
+# Command to run the FastAPI app
+CMD ["uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "3333"]
