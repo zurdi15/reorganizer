@@ -29,6 +29,10 @@
   padding: 0px;
 }
 
+#input-files-container {
+  padding: 10px;
+}
+
 #input-preview-container {
   padding: 10px;
 }
