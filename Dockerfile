@@ -19,10 +19,10 @@ COPY src/static /app/src/static
 COPY src/templates /app/src/templates
 
 # Copy the FastAPI app code into the container
-COPY . .
+COPY src/server.py /app/src/server.py
 
 # Expose the port the app runs on
-EXPOSE 8000
+EXPOSE 3333
 
 # Command to run the FastAPI app
 CMD ["uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "3333"]

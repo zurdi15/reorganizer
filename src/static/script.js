@@ -108,9 +108,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
   form.addEventListener("submit", function (event) {
     event.preventDefault();
-
-    const year = document.getElementById("year").value;
-    const month = document.getElementById("month").value;
     const path = document.getElementById("path").value;
     logsDiv.innerHTML = "";
     processed.textContent = 0;
@@ -119,7 +116,7 @@ document.addEventListener("DOMContentLoaded", function () {
     errors.textContent = 0;
     updateTotal(0);
 
-    ws.send(JSON.stringify({ year: year, month: month, path: path }));
+    ws.send(JSON.stringify({ path: path }));
   });
 
   connectWebSocket();

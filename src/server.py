@@ -75,12 +75,8 @@ async def classify_file(file_path, websocket: WebSocket):
     return FileType.UNKNOWN, Orientation.NULL
 
 
-def create_output_folders(year, month, country):
-    # Define the folder structure
-    if month:
-        base_folder = os.path.join(OUTPUT_PATH, str(year), str(month).zfill(2), country)
-    else:
-        base_folder = os.path.join(OUTPUT_PATH, str(year), country)
+def create_output_folders(path):
+    base_folder = os.path.join(OUTPUT_PATH, path)
     photo_folder = os.path.join(base_folder, FileType.PHOTO)
     video_folder = os.path.join(base_folder, FileType.VIDEO)
     horizontal_folder = os.path.join(video_folder, Orientation.HORIZONTAL)
@@ -108,12 +104,12 @@ def create_output_folders(year, month, country):
     }
 
 
-async def process_folder(year, month, path, websocket: WebSocket):
+async def process_folder(path, websocket: WebSocket):
     n_pictures = 0
     n_videos = 0
     n_unknown = 0
 
-    folders = create_output_folders(year, month, path)
+    folders = create_output_folders(path)
 
     files = os.listdir(INPUT_PATH)
     if not files:
@@ -121,12 +117,7 @@ async def process_folder(year, month, path, websocket: WebSocket):
         await websocket.send_text("<b>No files to process.</b>")
         return
 
-    print(
-        f"Processing files:\n\t- Year: {year}\n\t- Month: {month if month else 'N/A'}\n\t- Path: {path}"
-    )
-    await websocket.send_text(
-        f"Processing files:<br> - Year: <b>{year}</b><br> - Month: <b>{month if month else 'N/A'}</b><br> - Path: <b>{path}</b><br>"
-    )
+    print(f"Processing files: {path}")
 
     await websocket.send_text(f"event-total:{len(files)}")
     for file_name in files:
@@ -187,12 +178,13 @@ def read_root(request: Request):
 
 @app.get("/dirs")
 def get_dirs(subfolder: str = ""):
-    print(f"Getting dirs for {subfolder}")
+    print(f"Getting dirs for {OUTPUT_PATH}/{subfolder}")
     try:
         dirs = [
             d for d in os.listdir(f"{OUTPUT_PATH}/{subfolder}")
-            if os.path.isdir(os.path.join(OUTPUT_PATH, subfolder, d))
+            if os.path.isdir(os.path.join(OUTPUT_PATH, subfolder, d)) and not d in ["photo", "video", "reorganizer", "folder_template"]
         ]
+        dirs.sort()
     except FileNotFoundError:
         dirs = []
     print(f"Dirs: {dirs}")
@@ -212,16 +204,14 @@ async def websocket_reorganizer(websocket: WebSocket):
     #     return
     try:
         data = await websocket.receive_json()
-        year = data.get("year")
-        month = data.get("month")
         path = data.get("path")
 
-        if not year or not path:
+        if not path:
             await websocket.send_text(
-                f"<b style='color: red;'>Error:</b> Invalid <b>year ({year})</b> or <b>path ({path})</b>"
+                f"<b style='color: red;'>Error:</b> Invalid <b>path ({path})</b>"
             )
         else:
-            await process_folder(year, month, path, websocket)
+            await process_folder(path, websocket)
 
     except WebSocketDisconnect:
         pass
