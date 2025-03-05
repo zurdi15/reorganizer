@@ -1,5 +1,9 @@
 document.addEventListener("DOMContentLoaded", function () {
   const inputFiles = document.getElementById("input-files");
+  const inputPreview = document.getElementById("input-preview");
+  const inputPreviewVideo = document.getElementById("input-preview-video");
+  const pictureExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "tiff"];
+  const videoExtensions = ["mp4", "avi", "mov", "mkv", "flv", "wmv"];
   const logsDiv = document.getElementById("logs");
   const submitBtn = document.getElementById("submit-btn");
   const pathInput = document.getElementById("path");
@@ -14,9 +18,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const typingDelay = 300;
 
   function fetchInputFiles() {
-    fetch(
-      `${window.location.protocol}input`
-    )
+    fetch(`${window.location.protocol}input`)
       .then((response) => response.json())
       .then((data) => {
         inputFiles.innerHTML = "";
@@ -25,10 +27,32 @@ document.addEventListener("DOMContentLoaded", function () {
           const li = document.createElement("li");
           li.classList.add("file");
           li.textContent = file;
+
+          // Detect file type based on extension
+          const ext = file.split(".").pop().toLowerCase();
+          if (pictureExtensions.includes(ext)) {
+            li.classList.add("image-file");
+          } else if (videoExtensions.includes(ext)) {
+            li.classList.add("video-file");
+          } else {
+            li.classList.add("unknown-file");
+          }
           ul.appendChild(li);
         });
         ul.addEventListener("click", function (event) {
-          console.log("preview", event.target.textContent);
+          const ext = event.target.textContent.split(".").pop().toLowerCase();
+          if (pictureExtensions.includes(ext)) {
+            inputPreview.src = `${window.location.protocol}input/${event.target.textContent}`;
+            inputPreviewVideo.classList.add("hidden");
+            inputPreview.classList.remove("hidden");
+          } else if (videoExtensions.includes(ext)) {
+            inputPreviewVideo.src = `${window.location.protocol}input/${event.target.textContent}`;
+            inputPreview.classList.add("hidden");
+            inputPreviewVideo.classList.remove("hidden");
+          } else {
+            inputPreview.classList.add("hidden");
+            inputPreviewVideo.classList.add("hidden");
+          }
         });
         inputFiles.appendChild(ul);
       })
@@ -43,7 +67,6 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log("WebSocket connected");
     };
     ws.onmessage = function (event) {
-      console.log("WebSocket message received:", event.data);
       if (event.data.includes("event-total:")) {
         updateTotal(event.data.replace("event-total:", ""));
       } else if (event.data.includes("event-processed:")) {
@@ -86,7 +109,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const path = event.target.value;
     typingTimer = setTimeout(() => {
       fetch(
-        `${window.location.protocol}output?subfolder=${encodeURIComponent(path)}`
+        `${window.location.protocol}output?subfolder=${encodeURIComponent(
+          path
+        )}`
       )
         .then((response) => response.json())
         .then((data) => {

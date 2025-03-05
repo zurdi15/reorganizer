@@ -22,7 +22,17 @@
       <div class="row">
         <div class="col s12 l6">
           <div id="input-container">
-            <div id="input-files"></div>
+            <div class="row">
+              <div class="col s6">
+                <div id="input-files" class="col s12"></div>
+              </div>
+              <div id="input-preview-container" class="col s6">
+                <img id="input-preview" class="hidden" />
+                <video id="input-preview-video" class="hidden" controls autoplay>
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+            </div>
           </div>
 
           <div id="output-container">
@@ -47,24 +57,24 @@
 
         <div class="col s12 l6">
           <div class="logs-container">
-            <div class="logs"></div>
+            <div id="logs" class="logs"></div>
             <div class="logs-stats">
               <span class="chip grey lighten-2">
                 <span class="chip grey lighten-2">
-                  Processed: <span id="processed-count">0</span> /
+                  ✅ Processed: <span id="processed-count">0</span> /
                   <span id="total-files">0</span><br />
                 </span>
                 <span class="chip grey lighten-2">
-                  Pictures: <span id="pictures-count">0</span><br />
+                  🖼️ Pictures: <span id="pictures-count">0</span><br />
                 </span>
                 <span class="chip grey lighten-2">
-                  Videos: <span id="videos-count">0</span>
+                  🎞️ Videos: <span id="videos-count">0</span>
                 </span>
                 <span class="chip grey lighten-2">
-                  Unknown: <span id="unknown-count">0</span>
+                  📄 Unknown: <span id="unknown-count">0</span>
                 </span>
                 <span class="chip red lighten-4"
-                  >Errors: <span id="errors-count">0</span>
+                  >❌ Errors: <span id="errors-count">0</span>
                 </span>
               </span>
             </div>

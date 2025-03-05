@@ -40,6 +40,13 @@ class FileType(StrEnum):
     UNKNOWN = "unknown"
 
 
+file_emoji = {
+    FileType.PHOTO: "🖼️",
+    FileType.VIDEO: "🎞️",
+    FileType.UNKNOWN: "📄",
+}
+
+
 class FileName(StrEnum):
     DJI_FLY = "dji_fly"
 
@@ -150,13 +157,13 @@ async def process_folder(path, websocket: WebSocket):
                 dest_path = os.path.join(destination_folder, file_name)
                 shutil.move(file_path, dest_path)
                 print(
-                    f"File: {file_name}\n\t- Type: {file_type}\n\t- Orientation: {orientation if orientation else 'N/A'}\n\t- Dest.: {dest_path}"
+                    f"File: {file_name}\n\t- Type: {file_emoji[file_type]}{file_type}\n\t- Orientation: {orientation if orientation else 'N/A'}\n\t- Dest.: {dest_path}"
                 )
                 await websocket.send_text(
-                    f"event-processed:File: <b>{file_name}</b><br> - Type: <b style='color: {'blue' if file_type == FileType.PHOTO else 'orange'}'>{file_type}</b><br>{f' - Orientation: <b>{orientation}</b><br>' if orientation else ''} - Dest.: {dest_path}"
+                    f"event-processed:File: <b>{file_name}</b><br> - Type: <b>{file_emoji[file_type]}{file_type}</b><br>{f' - Orientation: <b>{orientation}</b><br>' if orientation else ''} - Dest.: {dest_path}"
                 )
     await websocket.send_text(
-        f"<h6 style='color: green'>Done!</h6>Pictures: <b>{n_pictures}</b><br>Videos: <b>{n_videos}</b><br>Unknown: <b>{n_unknown}</b>"
+        f"<h6 style='color: green'>Done!</h6>{file_emoji[FileType.PHOTO]} Pictures: <b>{n_pictures}</b><br>{file_emoji[FileType.VIDEO]} Videos: <b>{n_videos}</b><br>{file_emoji[FileType.UNKNOWN]} Unknown: <b>{n_unknown}</b>"
     )
 
 
@@ -164,8 +171,12 @@ app = FastAPI()
 
 # Montar la carpeta 'static' para servir archivos estáticos
 app.mount(
-    "/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static"
+    "/static",
+    StaticFiles(directory=os.path.join(BASE_DIR, "static")),
+    name="static",
 )
+# Montar el input para mostrar previsualizaciones
+app.mount("/input", StaticFiles(directory=INPUT_PATH), name="input")
 
 # Configurar la carpeta de plantillas
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
