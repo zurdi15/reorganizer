@@ -4,9 +4,9 @@
 <svg
    version="1.1"
    id="svg1"
-   width="525.00006"
-   height="457.8139"
-   viewBox="0 0 525.00006 457.8139"
+   width="525"
+   height="457.81387"
+   viewBox="0 0 525 457.81387"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
@@ -14,16 +14,16 @@
   <g
      id="layer1"
      style="display:inline;opacity:1"
-     transform="translate(-249.99995,-190)">
+     transform="translate(-249.99996,-190)">
     <rect
-       style="fill:#e5bf00;fill-opacity:1;stroke:#e59d00;stroke-width:5.00179;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;paint-order:fill markers stroke"
+       style="fill:#ffca28;fill-opacity:1;stroke:#ffa726;stroke-width:5.00179;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;paint-order:fill markers stroke"
        id="rect1"
        width="519.99823"
        height="360.8121"
        x="252.50085"
        y="284.50089" />
     <path
-       style="fill:#e59d00;fill-opacity:1;stroke:#e59d00;stroke-width:5.01402;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;paint-order:fill markers stroke"
+       style="fill:#ffa726;fill-opacity:1;stroke:#ffa726;stroke-width:5.01402;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1;paint-order:fill markers stroke"
        d="m 252.50702,286.82082 v -67.36701 l 27.10613,-26.9468 h 162.63679 l 39.07802,38.84831 H 772.493 v 56.36373 z"
        id="path2" />
     <g

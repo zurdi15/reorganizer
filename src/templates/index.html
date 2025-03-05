@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>Reorganizer</title>
-    <link rel="icon" href="/static/logo.svg" type="image/svg" />
+    <link rel="icon" href="/static/resources/logo.svg" type="image/svg" />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/icon?family=Material+Icons"
@@ -11,67 +11,11 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css"
     />
-    <style>
-      .header {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: #26A69A;
-        color: white;
-      }
-      .header img {
-        margin-right: 10px;
-        margin-top: -2px;
-      }
-      .header > h3 {
-        margin-top: 10px;
-      }
-      .container {
-        margin-top: 20px;
-        width: 80%;
-      }
-      #path-input-suggestions > ul > li {
-        margin-top: 5px;
-        cursor: pointer;
-        background-color: #ffffff;
-        transition: background-color 0.15s ease-in;
-      }
-      #path-input-suggestions > ul > li:hover {
-        background-color: #f0f0f0;
-      }
-      .folder::before {
-        content: "📁 ";
-      }
-      .submit-btn {
-        /* background-color: #5f5f5f; */
-      }
-      .logs {
-        white-space: pre-wrap;
-        border: 1px solid #000;
-        height: calc(100dvh - 170px) !important;
-        overflow-y: scroll;
-        margin-top: 10px;
-        padding: 10px;
-      }
-      .logs-title {
-        margin-top: 0px;
-        align-content: center;
-      }
-      .logs-header {
-        display: flex;
-        align-items: center;
-      }
-      .logs-header h5 {
-        margin-right: 20px;
-      }
-      .errors {
-        background-color: #ffa5a5;
-      }
-    </style>
+    <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
-    <div class="header">
-      <img height="40px" src="/static/logo.svg" />
+    <div class="header blue-grey darken-2">
+      <img height="40px" src="/static/resources/logo.svg" />
       <h3>Reorganizer</h3>
     </div>
     <div class="container">
@@ -85,7 +29,7 @@
             </div>
           </div>
           <button
-            class="submit-btn btn waves-effect waves-light"
+            class="btn waves-effect waves-light blue-grey darken-1"
             type="submit"
             name="action"
           >
@@ -95,22 +39,22 @@
         </form>
         <div class="col s6">
           <div class="logs-header">
-            <span class="chip">
-              <span class="chip">
+            <span class="chip grey lighten-2">
+              <span class="chip grey lighten-2">
                 Processed: <span id="processed-count">0</span> /
                 <span id="total-files">0</span><br />
               </span>
-              <span class="chip">
+              <span class="chip grey lighten-2">
                 Pictures: <span id="pictures-count">0</span><br />
               </span>
-              <span class="chip">
+              <span class="chip grey lighten-2">
                 Videos: <span id="videos-count">0</span>
               </span>
-              <span class="chip unknown"
+              <span class="chip grey lighten-2"
                 >Unknown: <span id="unknown-count">0</span></span
               >
             </span>
-            <span class="chip errors"
+            <span class="chip red lighten-4"
               >Errors: <span id="errors-count">0</span></span
             >
           </div>
