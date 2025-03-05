@@ -1,9 +1,10 @@
 document.addEventListener("DOMContentLoaded", function () {
+  const inputFiles = document.getElementById("input-files");
   const logsDiv = document.getElementById("logs");
   const submitBtn = document.getElementById("submit-btn");
   const pathInput = document.getElementById("path");
   const inputFieldLabel = document.getElementById("input-field-label");
-  const pathInputSuggestions = document.getElementById("output-suggestions");
+  const pathOutputSuggestions = document.getElementById("output-suggestions");
   const processed = document.getElementById("processed-count");
   const pictures = document.getElementById("pictures-count");
   const videos = document.getElementById("videos-count");
@@ -11,6 +12,30 @@ document.addEventListener("DOMContentLoaded", function () {
   let ws;
   let typingTimer;
   const typingDelay = 300;
+
+  function fetchInputFiles() {
+    fetch(
+      `${window.location.protocol}input`
+    )
+      .then((response) => response.json())
+      .then((data) => {
+        inputFiles.innerHTML = "";
+        const ul = document.createElement("ul");
+        data.forEach((file) => {
+          const li = document.createElement("li");
+          li.classList.add("file");
+          li.textContent = file;
+          ul.appendChild(li);
+        });
+        ul.addEventListener("click", function (event) {
+          console.log("preview", event.target.textContent);
+        });
+        inputFiles.appendChild(ul);
+      })
+      .catch((error) => {
+        console.error("Error fetching input files:", error);
+      });
+  }
 
   function connectWebSocket() {
     ws = new WebSocket(`ws://${window.location.host}/ws/reorganizer`);
@@ -54,18 +79,18 @@ document.addEventListener("DOMContentLoaded", function () {
     };
   }
 
-  function handlePathInput(event) {
+  function handleOutputSuggestions(event) {
     pathInput.classList.remove("error");
     inputFieldLabel.textContent = "Output path";
     clearTimeout(typingTimer);
     const path = event.target.value;
     typingTimer = setTimeout(() => {
       fetch(
-        `${window.location.protocol}dirs?subfolder=${encodeURIComponent(path)}`
+        `${window.location.protocol}output?subfolder=${encodeURIComponent(path)}`
       )
         .then((response) => response.json())
         .then((data) => {
-          pathInputSuggestions.innerHTML = "";
+          pathOutputSuggestions.innerHTML = "";
           const ul = document.createElement("ul");
           ul.classList.add("tree");
           if (pathInput.value) {
@@ -97,7 +122,7 @@ document.addEventListener("DOMContentLoaded", function () {
             pathInput.value += event.target.textContent + "/";
             pathInput.dispatchEvent(new Event("input"));
           });
-          pathInputSuggestions.appendChild(ul);
+          pathOutputSuggestions.appendChild(ul);
         })
         .catch((error) => {
           console.error("Error fetching subfolder data:", error);
@@ -105,7 +130,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }, typingDelay);
   }
 
-  pathInput.addEventListener("input", handlePathInput);
+  pathInput.addEventListener("input", handleOutputSuggestions);
   pathInput.addEventListener("focus", () => {
     pathInput.classList.remove("error");
     inputFieldLabel.textContent = "Output path";
@@ -116,7 +141,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const path = document.getElementById("path").value;
     if (!path.trim()) {
       pathInput.classList.add("error");
-      inputFieldLabel.textContent = "Output path cannot be empty.";
+      inputFieldLabel.textContent = "Output path cannot be empty";
       return;
     } else {
       pathInput.classList.remove("error");
@@ -133,6 +158,7 @@ document.addEventListener("DOMContentLoaded", function () {
     ws.send(JSON.stringify({ path: path }));
   });
 
+  fetchInputFiles();
   connectWebSocket();
   pathInput.dispatchEvent(new Event("input"));
 });

@@ -176,18 +176,32 @@ def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.get("/dirs")
-def get_dirs(subfolder: str = ""):
-    print(f"Getting dirs for {OUTPUT_PATH}/{subfolder}")
+@app.get("/input")
+def get_input():
+    print(f"Getting input files for {INPUT_PATH}")
+    try:
+        dirs = os.listdir(f"{INPUT_PATH}")
+        dirs.sort()
+    except FileNotFoundError:
+        dirs = []
+    print(f"Input: {dirs}")
+    return dirs
+
+
+@app.get("/output")
+def get_output(subfolder: str = ""):
+    print(f"Getting output tree directory for {OUTPUT_PATH}/{subfolder}")
     try:
         dirs = [
-            d for d in os.listdir(f"{OUTPUT_PATH}/{subfolder}")
-            if os.path.isdir(os.path.join(OUTPUT_PATH, subfolder, d)) and not d in ["photo", "video", "reorganizer", "folder_template"]
+            d
+            for d in os.listdir(f"{OUTPUT_PATH}/{subfolder}")
+            if os.path.isdir(os.path.join(OUTPUT_PATH, subfolder, d))
+            and d not in ["photo", "video", "reorganizer", "folder_template"]
         ]
         dirs.sort()
     except FileNotFoundError:
         dirs = []
-    print(f"Dirs: {dirs}")
+    print(f"Output: {dirs}")
     return dirs
 
 

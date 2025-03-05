@@ -29,23 +29,38 @@
   padding: 0px;
 }
 
+#input-container {
+  padding: 10px 10px 0px 10px;
+}
+
+.file::before {
+  content: "📄 ";
+}
+
 #output-container {
   margin-top: 31px;
 }
 
-.output-path-form {
+.output-path-form, #input-files {
   flex-shrink: 0; /* Keeps the form static at the top */
   padding: 5px 10px 5px 10px;
 }
 
-#output-suggestions {
+#output-suggestions, #input-files {
   flex-grow: 1; /* Take the remaining space */
   overflow-y: auto; /* Scroll only the list */
   max-height: calc(39dvh - 100px); /* Adjust depending on form's height */
-  margin-top: 10px;
 }
 
-#output-suggestions > ul {
+#input-files {
+  max-height: calc(39dvh - 25px);
+}
+
+#output-suggestions {
+  max-height: calc(39dvh - 90px);
+}
+
+#output-suggestions > ul, #input-files > ul {
   margin: 0px !important;
 }
 
@@ -64,13 +79,13 @@
   color: #ff1744 !important;
 }
 
-#output-suggestions > ul > li {
+#output-suggestions > ul > li, #input-files > ul > li {
   cursor: pointer;
   padding: 3px;
   border-radius: 5px;
   transition: background-color 0.15s ease-in;
 }
-#output-suggestions > ul > li:hover {
+#output-suggestions > ul > li:hover, #input-files > ul > li:hover {
   background-color: #e0e0e0;
 }
 .folder::before {
