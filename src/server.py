@@ -189,7 +189,10 @@ def read_root(request: Request):
 def get_dirs(subfolder: str = ""):
     print(f"Getting dirs for {subfolder}")
     try:
-        dirs = os.listdir(f"{OUTPUT_PATH}/{subfolder}")
+        dirs = [
+            d for d in os.listdir(f"{OUTPUT_PATH}/{subfolder}")
+            if os.path.isdir(os.path.join(OUTPUT_PATH, subfolder, d))
+        ]
     except FileNotFoundError:
         dirs = []
     print(f"Dirs: {dirs}")

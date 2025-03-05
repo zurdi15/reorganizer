@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
   <head>
     <title>Reorganizer</title>
@@ -25,6 +25,18 @@
       .container {
         margin-top: 20px;
         width: 80%;
+      }
+      #path-input-suggestions > ul > li {
+        margin-top: 5px;
+        cursor: pointer;
+        background-color: #ffffff;
+        transition: background-color 0.15s ease-in;
+      }
+      #path-input-suggestions > ul > li:hover {
+        background-color: #f0f0f0;
+      }
+      .folder::before {
+        content: "📁 ";
       }
       .logs {
         white-space: pre-wrap;

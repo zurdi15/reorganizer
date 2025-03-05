@@ -2,14 +2,16 @@ document.addEventListener("DOMContentLoaded", function () {
   const logsDiv = document.getElementById("logs");
   const form = document.querySelector("form");
   const pathInput = document.getElementById("path");
-  const pathInputSuggestions = document.getElementById("path-input-suggestions");
+  const pathInputSuggestions = document.getElementById(
+    "path-input-suggestions"
+  );
   const processed = document.getElementById("processed-count");
   const pictures = document.getElementById("pictures-count");
   const videos = document.getElementById("videos-count");
   const errors = document.getElementById("errors-count");
   let ws;
   let typingTimer;
-  const typingDelay = 1000;
+  const typingDelay = 300;
 
   function connectWebSocket() {
     ws = new WebSocket(`ws://${window.location.host}/ws/reorganizer`);
@@ -53,7 +55,7 @@ document.addEventListener("DOMContentLoaded", function () {
     };
   }
 
-  pathInput.addEventListener("input", function (event) {
+  function handlePathInput(event) {
     clearTimeout(typingTimer);
     const path = event.target.value;
     typingTimer = setTimeout(() => {
@@ -62,16 +64,47 @@ document.addEventListener("DOMContentLoaded", function () {
       )
         .then((response) => response.json())
         .then((data) => {
-          pathInputSuggestions.innerHTML = '';
-          data.forEach(dir => {
-            pathInputSuggestions.innerHTML += `<div class='helper-text'>${dir}</div>`
+          pathInputSuggestions.innerHTML = "";
+          const ul = document.createElement("ul");
+          ul.classList.add("tree");
+          if (pathInput.value) {
+            const li = document.createElement("li");
+            li.classList.add("folder");
+            li.textContent = "..";
+            ul.appendChild(li);
+          }
+          data.forEach((dir) => {
+            const li = document.createElement("li");
+            li.classList.add("folder");
+            li.textContent = dir;
+            ul.appendChild(li);
           });
+          ul.addEventListener("click", function (event) {
+            pathInput.focus();
+            if (event.target.textContent === "..") {
+              pathInput.value =
+                pathInput.value.split("/").slice(0, -2).join("/") + "/";
+              if (pathInput.value === "/") {
+                pathInput.value = "";
+              }
+              pathInput.dispatchEvent(new Event("input"));
+              return;
+            }
+            if (!pathInput.value.endsWith("/") && pathInput.value !== "") {
+              pathInput.value += "/";
+            }
+            pathInput.value += event.target.textContent + "/";
+            pathInput.dispatchEvent(new Event("input"));
+          });
+          pathInputSuggestions.appendChild(ul);
         })
         .catch((error) => {
           console.error("Error fetching subfolder data:", error);
         });
     }, typingDelay);
-  });
+  }
+
+  pathInput.addEventListener("input", handlePathInput);
 
   form.addEventListener("submit", function (event) {
     event.preventDefault();
@@ -90,6 +123,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   connectWebSocket();
+  pathInput.dispatchEvent(new Event("input"));
 });
 
 const disableSubmit = (disable) => {
