@@ -58,3 +58,7 @@
 .errors {
   background-color: #ffa5a5;
 }
+#error-message {
+  margin-top: 2px;
+  font-size: 14px;
+}

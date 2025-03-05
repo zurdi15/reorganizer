@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const pictures = document.getElementById("pictures-count");
   const videos = document.getElementById("videos-count");
   const errors = document.getElementById("errors-count");
+  const errorMessage = document.getElementById("error-message");
   let ws;
   let typingTimer;
   const typingDelay = 300;
@@ -80,6 +81,7 @@ document.addEventListener("DOMContentLoaded", function () {
             ul.appendChild(li);
           });
           ul.addEventListener("click", function (event) {
+            errorMessage.textContent = "";
             pathInput.focus();
             if (event.target.textContent === "..") {
               pathInput.value =
@@ -109,6 +111,14 @@ document.addEventListener("DOMContentLoaded", function () {
   form.addEventListener("submit", function (event) {
     event.preventDefault();
     const path = document.getElementById("path").value;
+
+    if (!path.trim()) {
+      errorMessage.textContent = "Output path cannot be empty.";
+      return;
+    } else {
+      errorMessage.textContent = "";
+    }
+
     logsDiv.innerHTML = "";
     processed.textContent = 0;
     pictures.textContent = 0;
