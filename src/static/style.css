@@ -42,6 +42,7 @@
   flex-grow: 1; /* Take the remaining space */
   overflow-y: auto; /* Scroll only the list */
   max-height: calc(39dvh - 100px); /* Adjust depending on form's height */
+  margin-top: 10px;
 }
 
 #output-suggestions > ul {
