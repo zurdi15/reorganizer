@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   const inputFiles = document.getElementById("input-files");
   const inputPreview = document.getElementById("input-preview");
+  let lastActive;
   const inputPreviewVideo = document.getElementById("input-preview-video");
   const pictureExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "tiff"];
   const videoExtensions = ["mp4", "avi", "mov", "mkv", "flv", "wmv"];
@@ -41,9 +42,15 @@ document.addEventListener("DOMContentLoaded", function () {
         });
         ul.addEventListener("click", function (event) {
           const ext = event.target.textContent.split(".").pop().toLowerCase();
+          if (lastActive) {
+            lastActive.classList.remove("input-active");
+          }
+          event.target.classList.add("input-active");
+          lastActive = event.target;
           if (pictureExtensions.includes(ext)) {
             inputPreview.src = `${window.location.protocol}input/${event.target.textContent}`;
             inputPreviewVideo.classList.add("hidden");
+            inputPreviewVideo.pause();
             inputPreview.classList.remove("hidden");
           } else if (videoExtensions.includes(ext)) {
             inputPreviewVideo.src = `${window.location.protocol}input/${event.target.textContent}`;
@@ -52,6 +59,7 @@ document.addEventListener("DOMContentLoaded", function () {
           } else {
             inputPreview.classList.add("hidden");
             inputPreviewVideo.classList.add("hidden");
+            inputPreviewVideo.pause();
           }
         });
         inputFiles.appendChild(ul);
@@ -88,6 +96,9 @@ document.addEventListener("DOMContentLoaded", function () {
         event.data.includes("event-complete") ||
         event.data.includes("event-busy:false")
       ) {
+        inputPreview.src = "";
+        inputPreviewVideo.src = "";
+        inputPreviewVideo.pause();
         disableSubmit(false);
       } else if (event.data.includes("event-busy:true")) {
         disableSubmit(true);
@@ -95,6 +106,7 @@ document.addEventListener("DOMContentLoaded", function () {
         logsDiv.innerHTML += `${event.data}\n`;
         logsDiv.scrollTop = logsDiv.scrollHeight;
       }
+      fetchInputFiles();
     };
     ws.onclose = () => {
       console.log("WebSocket closed. Reconnecting...");

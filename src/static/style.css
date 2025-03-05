@@ -118,7 +118,8 @@
   transition: background-color 0.15s ease-in;
 }
 #output-suggestions > ul > li:hover,
-#input-files > ul > li:hover {
+#input-files > ul > li:hover,
+.input-active {
   background-color: #e0e0e0;
 }
 .folder::before {
