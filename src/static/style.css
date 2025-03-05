@@ -3,7 +3,7 @@
   align-items: center;
   justify-content: center;
   color: white;
-  flex-wrap: wrap; /* Permite que los elementos se envuelvan en pantallas pequeñas */
+  flex-wrap: wrap;
 }
 .header img {
   margin-right: 10px;
@@ -12,72 +12,90 @@
 .header > h4 {
   margin-top: 5px;
 }
+
 .container {
   max-width: 95% !important;
   width: 95% !important;
   margin-top: 20px;
 }
-#error-message {
-  margin: 8px 0px 16px 0px;
-  font-size: 12px;
+
+#output-container,
+#input-container {
+  height: 39dvh;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid #607d8b;
+  border-radius: 5px;
+  padding: 0px;
 }
+
+#output-container {
+  margin-top: 31px;
+}
+
+.output-path-form {
+  flex-shrink: 0; /* Keeps the form static at the top */
+  padding: 5px 10px 5px 10px;
+}
+
+#output-suggestions {
+  flex-grow: 1; /* Take the remaining space */
+  overflow-y: auto; /* Scroll only the list */
+  max-height: calc(39dvh - 100px); /* Adjust depending on form's height */
+}
+
+#output-suggestions > ul {
+  margin: 0px !important;
+}
+
 .input-field input:focus {
-  border-bottom: 1px solid #607d8b!important;
-  box-shadow: 0 1px 0 0 #607d8b!important;
+  border-bottom: 1px solid #607d8b !important;
+  box-shadow: 0 1px 0 0 #607d8b !important;
 }
 .input-field input:focus + label {
-  color: #607d8b!important;
+  color: #607d8b !important;
 }
-#path-input-suggestions {
-  white-space: pre-wrap;
-  height: 40dvh!important;
-  border:  2px solid;
-  border-radius: 5px;
-  border-color: #607d8b!important;
-  padding: 0px!important;
-  overflow-y: scroll;
+.input-field input.error {
+  border-bottom: 1px solid #ff1744 !important;
+  box-shadow: 0 1px 0 0 #ff1744 !important;
 }
-.tree {
-  margin: 0px!important;
+.input-field input.error + label {
+  color: #ff1744 !important;
 }
-#path-input-suggestions > ul > li {
+
+#output-suggestions > ul > li {
   cursor: pointer;
   padding: 3px;
   border-radius: 5px;
   transition: background-color 0.15s ease-in;
 }
-#path-input-suggestions > ul > li:hover {
+#output-suggestions > ul > li:hover {
   background-color: #e0e0e0;
 }
 .folder::before {
   content: "📁 ";
 }
-.row {
-  margin-bottom: 0px!important;
-}
-.submit-btn {
+#submit-btn {
+  margin-top: 15px;
   margin-bottom: 20px;
 }
+
 .logs {
   white-space: pre-wrap;
-  border:  2px solid;
+  border: 2px solid;
   border-radius: 5px;
-  border-color: #607d8b!important;
+  border-color: #607d8b !important;
   height: calc(100dvh - 170px) !important;
   overflow-y: scroll;
-  margin-top: 10px;
   padding: 10px;
 }
-.logs-title {
-  margin-top: 0px;
-  align-content: center;
-}
-.logs-header {
+.logs-stats {
+  margin-top: 15px;
   display: flex;
   align-items: center;
   flex-wrap: wrap; /* Permite que los elementos se envuelvan en pantallas pequeñas */
 }
-.logs-header h5 {
+.logs-stats h5 {
   margin-right: 20px;
 }
 .errors {

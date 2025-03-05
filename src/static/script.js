@@ -1,15 +1,13 @@
 document.addEventListener("DOMContentLoaded", function () {
   const logsDiv = document.getElementById("logs");
-  const form = document.querySelector("form");
+  const submitBtn = document.getElementById("submit-btn");
   const pathInput = document.getElementById("path");
-  const pathInputSuggestions = document.getElementById(
-    "path-input-suggestions"
-  );
+  const inputFieldLabel = document.getElementById("input-field-label");
+  const pathInputSuggestions = document.getElementById("output-suggestions");
   const processed = document.getElementById("processed-count");
   const pictures = document.getElementById("pictures-count");
   const videos = document.getElementById("videos-count");
   const errors = document.getElementById("errors-count");
-  const errorMessage = document.getElementById("error-message");
   let ws;
   let typingTimer;
   const typingDelay = 300;
@@ -57,6 +55,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function handlePathInput(event) {
+    pathInput.classList.remove("error");
+    inputFieldLabel.textContent = "Output path";
     clearTimeout(typingTimer);
     const path = event.target.value;
     typingTimer = setTimeout(() => {
@@ -81,7 +81,6 @@ document.addEventListener("DOMContentLoaded", function () {
             ul.appendChild(li);
           });
           ul.addEventListener("click", function (event) {
-            errorMessage.textContent = "";
             pathInput.focus();
             if (event.target.textContent === "..") {
               pathInput.value =
@@ -107,16 +106,21 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   pathInput.addEventListener("input", handlePathInput);
+  pathInput.addEventListener("focus", () => {
+    pathInput.classList.remove("error");
+    inputFieldLabel.textContent = "Output path";
+  });
 
-  form.addEventListener("submit", function (event) {
+  submitBtn.addEventListener("click", function (event) {
     event.preventDefault();
     const path = document.getElementById("path").value;
-
     if (!path.trim()) {
-      errorMessage.textContent = "Output path cannot be empty.";
+      pathInput.classList.add("error");
+      inputFieldLabel.textContent = "Output path cannot be empty.";
       return;
     } else {
-      errorMessage.textContent = "";
+      pathInput.classList.remove("error");
+      inputFieldLabel.textContent = "Output path";
     }
 
     logsDiv.innerHTML = "";
