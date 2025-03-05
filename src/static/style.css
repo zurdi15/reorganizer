@@ -55,6 +55,9 @@
 .row {
   margin-bottom: 0px!important;
 }
+.submit-btn {
+  margin-bottom: 20px;
+}
 .logs {
   white-space: pre-wrap;
   border:  2px solid;
