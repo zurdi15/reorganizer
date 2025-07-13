@@ -1,8 +1,9 @@
 document.addEventListener("DOMContentLoaded", function () {
   const inputFiles = document.getElementById("input-files");
-  const inputPreview = document.getElementById("input-preview");
+  const floatingPreview = document.getElementById("floating-preview");
+  const floatingPreviewImg = document.getElementById("floating-preview-img");
+  const floatingPreviewVideo = document.getElementById("floating-preview-video");
   let lastActive;
-  const inputPreviewVideo = document.getElementById("input-preview-video");
   const pictureExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "tiff"];
   const videoExtensions = ["mp4", "avi", "mov", "mkv", "flv", "wmv"];
   const logsDiv = document.getElementById("logs");
@@ -16,7 +17,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const errors = document.getElementById("errors-count");
   let ws;
   let typingTimer;
+  let hideTimer; // Add timer for hiding preview
   const typingDelay = 300;
+  const hideDelay = 100; // Small delay before hiding to prevent flickering
 
   function fetchInputFiles() {
     fetch(`${window.location.protocol}input`)
@@ -38,35 +41,123 @@ document.addEventListener("DOMContentLoaded", function () {
           } else {
             li.classList.add("unknown-file");
           }
+          
+          // Add hover event listeners for preview directly to each list item
+          li.addEventListener("mouseenter", function (event) {
+            clearTimeout(hideTimer); // Cancel any pending hide
+            showFloatingPreview(event.target, event);
+          });
+          
+          li.addEventListener("mouseleave", function (event) {
+            hideTimer = setTimeout(() => {
+              hideFloatingPreview();
+            }, hideDelay);
+          });
+          
+          li.addEventListener("mousemove", function (event) {
+            if (!floatingPreview.classList.contains("hidden")) {
+              updateFloatingPreviewPosition(event);
+            }
+          });
+          
+          // Keep click functionality for active selection
+          li.addEventListener("click", function (event) {
+            if (lastActive) {
+              lastActive.classList.remove("input-active");
+            }
+            event.target.classList.add("input-active");
+            lastActive = event.target;
+          });
+          
           ul.appendChild(li);
         });
-        ul.addEventListener("click", function (event) {
-          const ext = event.target.textContent.split(".").pop().toLowerCase();
-          if (lastActive) {
-            lastActive.classList.remove("input-active");
-          }
-          event.target.classList.add("input-active");
-          lastActive = event.target;
-          if (pictureExtensions.includes(ext)) {
-            inputPreview.src = `${window.location.protocol}input/${event.target.textContent}`;
-            inputPreviewVideo.classList.add("hidden");
-            inputPreviewVideo.pause();
-            inputPreview.classList.remove("hidden");
-          } else if (videoExtensions.includes(ext)) {
-            inputPreviewVideo.src = `${window.location.protocol}input/${event.target.textContent}`;
-            inputPreview.classList.add("hidden");
-            inputPreviewVideo.classList.remove("hidden");
-          } else {
-            inputPreview.classList.add("hidden");
-            inputPreviewVideo.classList.add("hidden");
-            inputPreviewVideo.pause();
-          }
-        });
+        
         inputFiles.appendChild(ul);
       })
       .catch((error) => {
         console.error("Error fetching input files:", error);
       });
+  }
+
+  function showFloatingPreview(fileElement, event) {
+    const filename = fileElement.textContent;
+    const ext = filename.split(".").pop().toLowerCase();
+    
+    console.log("Showing preview for:", filename, "Extension:", ext); // Debug log
+    
+    if (pictureExtensions.includes(ext)) {
+      floatingPreviewImg.src = `${window.location.protocol}//${window.location.host}/input/${filename}`;
+      floatingPreviewVideo.classList.add("hidden");
+      floatingPreviewVideo.pause();
+      floatingPreviewVideo.src = "";
+      floatingPreviewImg.classList.remove("hidden");
+      floatingPreview.classList.remove("hidden");
+      console.log("Showing image preview"); // Debug log
+    } else if (videoExtensions.includes(ext)) {
+      floatingPreviewVideo.src = `${window.location.protocol}//${window.location.host}/input/${filename}`;
+      floatingPreviewImg.classList.add("hidden");
+      floatingPreviewImg.src = "";
+      floatingPreviewVideo.classList.remove("hidden");
+      floatingPreview.classList.remove("hidden");
+      // Ensure video plays when shown
+      floatingPreviewVideo.play().catch(e => console.log("Video play failed:", e));
+      console.log("Showing video preview"); // Debug log
+    } else {
+      console.log("Unknown file type, not showing preview"); // Debug log
+      return;
+    }
+    
+    updateFloatingPreviewPosition(event);
+  }
+
+  function hideFloatingPreview() {
+    console.log("Hiding floating preview"); // Debug log
+    clearTimeout(hideTimer); // Clear any pending hide timer
+    floatingPreview.classList.add("hidden");
+    floatingPreviewImg.classList.add("hidden");
+    floatingPreviewVideo.classList.add("hidden");
+    floatingPreviewVideo.pause();
+    floatingPreviewImg.src = "";
+    floatingPreviewVideo.src = "";
+  }
+
+  function updateFloatingPreviewPosition(event) {
+    const x = event.clientX;
+    const y = event.clientY;
+    const margin = 20;
+    
+    // Initially position the preview to the right of the cursor
+    floatingPreview.style.left = (x + margin) + "px";
+    floatingPreview.style.top = (y - 50) + "px"; // Start slightly above cursor
+    
+    // Force a layout update to get accurate dimensions
+    floatingPreview.offsetHeight;
+    
+    // Get the actual dimensions after positioning
+    const rect = floatingPreview.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Adjust horizontal position if it would go off-screen
+    if (rect.right > viewportWidth - margin) {
+      floatingPreview.style.left = (x - rect.width - margin) + "px";
+    }
+    
+    // Adjust vertical position if it would go off-screen
+    if (rect.bottom > viewportHeight - margin) {
+      floatingPreview.style.top = (viewportHeight - rect.height - margin) + "px";
+    }
+    
+    // Ensure it doesn't go above the top of the screen
+    if (rect.top < margin) {
+      floatingPreview.style.top = margin + "px";
+    }
+    
+    // For very tall images, center them vertically if they still don't fit
+    const finalRect = floatingPreview.getBoundingClientRect();
+    if (finalRect.height >= viewportHeight - (2 * margin)) {
+      floatingPreview.style.top = margin + "px";
+    }
   }
 
   function connectWebSocket() {
@@ -96,9 +187,7 @@ document.addEventListener("DOMContentLoaded", function () {
         event.data.includes("event-complete") ||
         event.data.includes("event-busy:false")
       ) {
-        inputPreview.src = "";
-        inputPreviewVideo.src = "";
-        inputPreviewVideo.pause();
+        hideFloatingPreview();
         disableSubmit(false);
       } else if (event.data.includes("event-busy:true")) {
         disableSubmit(true);

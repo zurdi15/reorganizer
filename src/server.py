@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from src.shared import (
+from shared import (
     FileType,
     create_output_folders_server,
     process_files,
@@ -216,4 +216,4 @@ async def websocket_reorganizer(websocket: WebSocket):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=3333)
+    uvicorn.run(app, host="0.0.0.0", port=3334)
