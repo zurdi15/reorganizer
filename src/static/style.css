@@ -160,9 +160,9 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
   padding: 10px;
   max-width: min(400px, 30vw);
-  max-height: min(600px, 70vh);
+  max-height: min(6000px, 75vh);
   transform: translate(15px, -25%);
-  opacity: 0.95;
+  opacity: 1;
   display: flex;
   align-items: center;
   justify-content: center;
