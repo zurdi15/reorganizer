@@ -1,9 +1,10 @@
 FROM python:3.11-slim
 
-# Install dependencies for OpenCV
+# Install dependencies for OpenCV and system tools
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
-    libglib2.0-0
+    libglib2.0-0 \
+    sudo
 
 WORKDIR /app
 
@@ -19,7 +20,9 @@ COPY src/static /app/src/static
 COPY src/templates /app/src/templates
 
 # Copy the FastAPI app code into the container
+COPY src/__init__.py /app/src/__init__.py
 COPY src/server.py /app/src/server.py
+COPY src/shared.py /app/src/shared.py
 
 # Expose the port the app runs on
 EXPOSE 3333
