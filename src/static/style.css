@@ -1,3 +1,8 @@
+body {
+  background-color: #0D1117;
+  color: white;
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -7,10 +12,10 @@
 }
 .header img {
   margin-right: 10px;
-  margin-top: -6px;
+  margin-top: 7px;
 }
 .header > h4 {
-  margin-top: 5px;
+  margin-top: 15px;
 }
 
 .container {
@@ -79,6 +84,10 @@
   margin: 0px !important;
 }
 
+.input-field input {
+  color: white;
+}
+
 .input-field input:focus {
   border-bottom: 1px solid #607d8b !important;
   box-shadow: 0 1px 0 0 #607d8b !important;
@@ -104,7 +113,7 @@
 #output-suggestions > ul > li:hover,
 #input-files > ul > li:hover,
 .input-active {
-  background-color: #e0e0e0;
+  background-color: #383838;
 }
 .folder::before {
   content: "📁 ";
@@ -156,9 +165,8 @@
   pointer-events: none;
   border: 2px solid #607d8b;
   border-radius: 8px;
-  background-color: white;
+  background-color: #0D1117;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-  padding: 10px;
   max-width: min(400px, 30vw);
   max-height: min(6000px, 75vh);
   transform: translate(15px, -25%);
