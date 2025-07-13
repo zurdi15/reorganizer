@@ -7,6 +7,9 @@ import subprocess
 import sys
 from enum import StrEnum
 
+# Environment Variables:
+# USER_ID: User ID for ownership changes (default: 1000)
+
 INPUT_PATH: str = "/mnt/media/pictures/zurdelia/reorganizer"
 OUTPUT_PATH: str = "/mnt/media/pictures/zurdelia"
 
@@ -34,6 +37,15 @@ class FileType(StrEnum):
 
 class FileName(StrEnum):
     DJI_FLY = "dji_fly"
+
+
+def get_user_id():
+    """Get USER_ID from environment variable, default to 1000 if not set"""
+    try:
+        user_id = os.getenv("USER_ID", "1000")
+        return user_id
+    except Exception:
+        return "1000"
 
 
 def check_orientation(width, height):
@@ -101,6 +113,12 @@ def process_folder(year, month, country):
     # Create the structured output folders and get their paths
     folders = create_output_folders(year, month, country)
 
+    # Determine the base output folder for ownership changes
+    if month:
+        base_output_folder = os.path.join(OUTPUT_PATH, str(year), str(month).zfill(2), country)
+    else:
+        base_output_folder = os.path.join(OUTPUT_PATH, str(year), country)
+
     print(
         f"Organizing files for - Year: {year}, Month: {month if month else 'None'}, Country: {country}\n"
     )
@@ -132,27 +150,53 @@ def process_folder(year, month, country):
                 shutil.move(file_path, dest_path)
                 print(f"Moved {file_name} to {dest_path}")
 
+    # Change ownership of the output folder structure
+    print(f"\nChanging ownership of output folder: {base_output_folder}")
+    change_ownership_output(base_output_folder)
 
-def change_ownership():
+
+def change_ownership_input():
+    """Change ownership of input path using USER_ID environment variable"""
+    user_id = get_user_id()
     try:
         subprocess.run(
             [
                 "sudo",
                 "chown",
                 "-R",
-                "ymir:ymir",
+                f"{user_id}:{user_id}",
                 INPUT_PATH,
             ],
             check=True,
         )
-        print("Ownership changed successfully.")
+        print(f"Input path ownership changed successfully to {user_id}:{user_id}")
     except subprocess.CalledProcessError as e:
-        print(f"Error changing ownership: {e}")
+        print(f"Error changing input path ownership: {e}")
         sys.exit(1)
 
 
+def change_ownership_output(output_path):
+    """Change ownership of output path using USER_ID environment variable"""
+    user_id = get_user_id()
+    try:
+        subprocess.run(
+            [
+                "sudo",
+                "chown",
+                "-R",
+                f"{user_id}:{user_id}",
+                output_path,
+            ],
+            check=True,
+        )
+        print(f"Output path ownership changed successfully to {user_id}:{user_id}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error changing output path ownership: {e}")
+        # Don't exit here, as this is less critical than input ownership
+
+
 if __name__ == "__main__":
-    change_ownership()
+    change_ownership_input()
     parser = argparse.ArgumentParser(
         description="Process files in a folder and classify them based on type and orientation."
     )
