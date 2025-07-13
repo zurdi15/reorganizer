@@ -3,6 +3,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const floatingPreview = document.getElementById("floating-preview");
   const floatingPreviewImg = document.getElementById("floating-preview-img");
   const floatingPreviewVideo = document.getElementById("floating-preview-video");
+  const loadingSpinner = document.getElementById("loading-spinner");
+  const errorMessage = document.getElementById("error-message");
   let lastActive;
   const pictureExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "tiff"];
   const videoExtensions = ["mp4", "avi", "mov", "mkv", "flv", "wmv"];
@@ -18,14 +20,21 @@ document.addEventListener("DOMContentLoaded", function () {
   let ws;
   let typingTimer;
   let hideTimer; // Add timer for hiding preview
+  let loadingTimer; // Add timer for loading state
   const typingDelay = 300;
   const hideDelay = 100; // Small delay before hiding to prevent flickering
+  const loadingDelay = 200; // Show loading after 200ms to avoid flicker for fast loads
+  
+  // Cache for loaded images/videos
+  const mediaCache = new Map();
+  let currentPreviewUrl = null;
 
   function fetchInputFiles() {
-    fetch(`${window.location.protocol}input`)
+    fetch(`${window.location.protocol}//${window.location.host}/input`)
       .then((response) => response.json())
       .then((data) => {
         inputFiles.innerHTML = "";
+        mediaCache.clear(); // Clear cache when file list changes
         const ul = document.createElement("ul");
         data.forEach((file) => {
           const li = document.createElement("li");
@@ -60,6 +69,20 @@ document.addEventListener("DOMContentLoaded", function () {
             }
           });
           
+          // Preload images on mouse enter for faster previews
+          li.addEventListener("mouseenter", function (event) {
+            const filename = event.target.textContent;
+            const ext = filename.split(".").pop().toLowerCase();
+            const url = getPreviewUrl(filename, ext);
+            
+            // Preload images for faster display
+            if (pictureExtensions.includes(ext) && !mediaCache.has(url)) {
+              const img = new Image();
+              img.onload = () => mediaCache.set(url, true);
+              img.src = url;
+            }
+          });
+          
           // Keep click functionality for active selection
           li.addEventListener("click", function (event) {
             if (lastActive) {
@@ -82,26 +105,31 @@ document.addEventListener("DOMContentLoaded", function () {
   function showFloatingPreview(fileElement, event) {
     const filename = fileElement.textContent;
     const ext = filename.split(".").pop().toLowerCase();
+    const url = getPreviewUrl(filename, ext);
     
     console.log("Showing preview for:", filename, "Extension:", ext); // Debug log
     
+    // Clear any existing timers
+    clearTimeout(loadingTimer);
+    
+    // If it's the same file, just update position
+    if (currentPreviewUrl === url && !floatingPreview.classList.contains("hidden")) {
+      updateFloatingPreviewPosition(event);
+      return;
+    }
+    
+    currentPreviewUrl = url;
+    
+    // Hide all elements initially
+    hideAllPreviewElements();
+    
+    // Show the preview container
+    floatingPreview.classList.remove("hidden");
+    
     if (pictureExtensions.includes(ext)) {
-      floatingPreviewImg.src = `${window.location.protocol}//${window.location.host}/input/${filename}`;
-      floatingPreviewVideo.classList.add("hidden");
-      floatingPreviewVideo.pause();
-      floatingPreviewVideo.src = "";
-      floatingPreviewImg.classList.remove("hidden");
-      floatingPreview.classList.remove("hidden");
-      console.log("Showing image preview"); // Debug log
+      showImagePreview(url, event);
     } else if (videoExtensions.includes(ext)) {
-      floatingPreviewVideo.src = `${window.location.protocol}//${window.location.host}/input/${filename}`;
-      floatingPreviewImg.classList.add("hidden");
-      floatingPreviewImg.src = "";
-      floatingPreviewVideo.classList.remove("hidden");
-      floatingPreview.classList.remove("hidden");
-      // Ensure video plays when shown
-      floatingPreviewVideo.play().catch(e => console.log("Video play failed:", e));
-      console.log("Showing video preview"); // Debug log
+      showVideoPreview(url, event);
     } else {
       console.log("Unknown file type, not showing preview"); // Debug log
       return;
@@ -110,13 +138,102 @@ document.addEventListener("DOMContentLoaded", function () {
     updateFloatingPreviewPosition(event);
   }
 
+  function showImagePreview(url, event) {
+    // Check if image is already cached
+    if (mediaCache.has(url)) {
+      console.log("Loading image from cache"); // Debug log
+      floatingPreviewImg.src = url;
+      floatingPreviewImg.classList.remove("hidden");
+      return;
+    }
+    
+    // Show loading after delay to avoid flicker
+    loadingTimer = setTimeout(() => {
+      if (currentPreviewUrl === url) {
+        loadingSpinner.classList.remove("hidden");
+      }
+    }, loadingDelay);
+    
+    // Create new image for preloading
+    const img = new Image();
+    
+    img.onload = function() {
+      clearTimeout(loadingTimer);
+      if (currentPreviewUrl === url) {
+        mediaCache.set(url, true);
+        loadingSpinner.classList.add("hidden");
+        errorMessage.classList.add("hidden");
+        floatingPreviewImg.src = url;
+        floatingPreviewImg.classList.remove("hidden");
+        console.log("Image loaded successfully"); // Debug log
+      }
+    };
+    
+    img.onerror = function() {
+      clearTimeout(loadingTimer);
+      if (currentPreviewUrl === url) {
+        loadingSpinner.classList.add("hidden");
+        errorMessage.classList.remove("hidden");
+        console.log("Image failed to load"); // Debug log
+      }
+    };
+    
+    img.src = url;
+  }
+
+  function showVideoPreview(url, event) {
+    // Show loading after delay
+    loadingTimer = setTimeout(() => {
+      if (currentPreviewUrl === url) {
+        loadingSpinner.classList.remove("hidden");
+      }
+    }, loadingDelay);
+    
+    floatingPreviewVideo.src = url;
+    
+    const handleVideoLoad = () => {
+      clearTimeout(loadingTimer);
+      if (currentPreviewUrl === url) {
+        loadingSpinner.classList.add("hidden");
+        errorMessage.classList.add("hidden");
+        floatingPreviewVideo.classList.remove("hidden");
+        floatingPreviewVideo.play().catch(e => console.log("Video play failed:", e));
+        console.log("Video loaded successfully"); // Debug log
+      }
+      floatingPreviewVideo.removeEventListener('loadeddata', handleVideoLoad);
+      floatingPreviewVideo.removeEventListener('error', handleVideoError);
+    };
+    
+    const handleVideoError = () => {
+      clearTimeout(loadingTimer);
+      if (currentPreviewUrl === url) {
+        loadingSpinner.classList.add("hidden");
+        errorMessage.classList.remove("hidden");
+        console.log("Video failed to load"); // Debug log
+      }
+      floatingPreviewVideo.removeEventListener('loadeddata', handleVideoLoad);
+      floatingPreviewVideo.removeEventListener('error', handleVideoError);
+    };
+    
+    floatingPreviewVideo.addEventListener('loadeddata', handleVideoLoad);
+    floatingPreviewVideo.addEventListener('error', handleVideoError);
+  }
+
+  function hideAllPreviewElements() {
+    floatingPreviewImg.classList.add("hidden");
+    floatingPreviewVideo.classList.add("hidden");
+    loadingSpinner.classList.add("hidden");
+    errorMessage.classList.add("hidden");
+    floatingPreviewVideo.pause();
+  }
+
   function hideFloatingPreview() {
     console.log("Hiding floating preview"); // Debug log
     clearTimeout(hideTimer); // Clear any pending hide timer
+    clearTimeout(loadingTimer); // Clear any pending loading timer
+    currentPreviewUrl = null;
     floatingPreview.classList.add("hidden");
-    floatingPreviewImg.classList.add("hidden");
-    floatingPreviewVideo.classList.add("hidden");
-    floatingPreviewVideo.pause();
+    hideAllPreviewElements();
     floatingPreviewImg.src = "";
     floatingPreviewVideo.src = "";
   }
@@ -311,4 +428,32 @@ function updateProcessedVideos() {
 function updateErrors() {
   document.getElementById("errors-count").textContent =
     Number(document.getElementById("errors-count").textContent) + 1;
+}
+
+// Utility function to get optimized preview URL
+function getPreviewUrl(filename, ext) {
+  const baseUrl = `${window.location.protocol}//${window.location.host}`;
+  
+  // For images, you could add thumbnail support here if your server provides it
+  // For now, we'll use the original image but you could modify this to:
+  // return `${baseUrl}/thumbnail/${filename}` for faster loading
+  
+  return `${baseUrl}/input/${filename}`;
+}
+
+// Cleanup function for better memory management
+function cleanupPreview() {
+  // Remove old event listeners and clean up resources
+  floatingPreviewVideo.pause();
+  floatingPreviewVideo.src = "";
+  floatingPreviewImg.src = "";
+  
+  // Limit cache size to prevent memory issues
+  if (mediaCache.size > 50) {
+    const entries = Array.from(mediaCache.keys());
+    // Remove oldest 10 entries
+    for (let i = 0; i < 10; i++) {
+      mediaCache.delete(entries[i]);
+    }
+  }
 }
