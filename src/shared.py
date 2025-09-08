@@ -202,7 +202,7 @@ def process_files(input_path, folders, progress_callback=None):
         "total": 0
     }
     
-    files = os.listdir(input_path)
+    files = [f for f in os.listdir(input_path) if os.path.isfile(os.path.join(input_path, f))]
     stats["total"] = len(files)
     
     if not files:
@@ -216,32 +216,31 @@ def process_files(input_path, folders, progress_callback=None):
     for file_name in files:
         file_path = os.path.join(input_path, file_name)
         
-        if os.path.isfile(file_path):
-            file_type, orientation = classify_file(file_path)
-            destination_folder = get_destination_folder(file_name, file_type, orientation, folders)
+        file_type, orientation = classify_file(file_path)
+        destination_folder = get_destination_folder(file_name, file_type, orientation, folders)
+        
+        # Update statistics
+        if file_type == FileType.PHOTO:
+            stats["pictures"] += 1
+        elif file_type == FileType.VIDEO:
+            stats["videos"] += 1
+        else:
+            stats["unknown"] += 1
+        
+        stats["processed"] += 1
+        
+        # Move file to the appropriate folder
+        if destination_folder:
+            dest_path = os.path.join(destination_folder, file_name)
+            shutil.move(file_path, dest_path)
             
-            # Update statistics
-            if file_type == FileType.PHOTO:
-                stats["pictures"] += 1
-            elif file_type == FileType.VIDEO:
-                stats["videos"] += 1
-            else:
-                stats["unknown"] += 1
-            
-            stats["processed"] += 1
-            
-            # Move file to the appropriate folder
-            if destination_folder:
-                dest_path = os.path.join(destination_folder, file_name)
-                shutil.move(file_path, dest_path)
-                
-                if progress_callback:
-                    progress_callback("file_processed", {
-                        "file_name": file_name,
-                        "file_type": file_type,
-                        "orientation": orientation,
-                        "dest_path": dest_path,
-                        "stats": stats.copy()
-                    })
+            if progress_callback:
+                progress_callback("file_processed", {
+                    "file_name": file_name,
+                    "file_type": file_type,
+                    "orientation": orientation,
+                    "dest_path": dest_path,
+                    "stats": stats.copy()
+                })
     
     return stats

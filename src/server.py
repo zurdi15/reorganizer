@@ -10,10 +10,12 @@ from fastapi.templating import Jinja2Templates
 from src.shared import (
     FileType,
     create_output_folders_server,
-    process_files,
+    classify_file,
+    get_destination_folder,
     change_ownership_input,
     change_ownership_output,
 )
+import shutil
 
 dotenv.load_dotenv()
 INPUT_PATH: str = os.getenv("INPUT", "/input")
@@ -30,11 +32,7 @@ file_emoji = {
 
 
 async def process_folder(path, websocket: WebSocket):
-    """Process files using the shared module with WebSocket progress updates"""
-    n_pictures = 0
-    n_videos = 0
-    n_unknown = 0
-
+    """Process files with real-time WebSocket progress updates"""
     # Change ownership of input path first
     if not change_ownership_input(INPUT_PATH):
         await websocket.send_text("event-error:Failed to change input path ownership")
@@ -46,67 +44,65 @@ async def process_folder(path, websocket: WebSocket):
 
     print(f"Processing files: {path}")
 
-    def progress_callback(event_type, data):
-        """Handle progress updates for WebSocket"""
-        nonlocal n_pictures, n_videos, n_unknown
+    # Get list of files to process
+    try:
+        files = [f for f in os.listdir(INPUT_PATH) if os.path.isfile(os.path.join(INPUT_PATH, f))]
+    except FileNotFoundError:
+        await websocket.send_text("event-error:Input directory not found")
+        return
 
-        if event_type == "no_files":
-            return  # Will be handled by the stats check
-        elif event_type == "total":
-            # Send total files count
-            return  # Will be sent separately
-        elif event_type == "file_processed":
-            # Update counters
-            if data["file_type"] == FileType.PHOTO:
-                n_pictures = data["stats"]["pictures"]
-            elif data["file_type"] == FileType.VIDEO:
-                n_videos = data["stats"]["videos"]
-            else:
-                n_unknown = data["stats"]["unknown"]
-
-    # Process all files
-    stats = process_files(INPUT_PATH, folders, progress_callback)
-
-    if stats["total"] == 0:
-        print("No files to process.")
+    if not files:
         await websocket.send_text("<b>No files to process.</b>")
         return
 
-    await websocket.send_text(f"event-total:{stats['total']}")
+    # Send total count
+    await websocket.send_text(f"event-total:{len(files)}")
 
-    # Send individual file updates
-    for file_name in os.listdir(INPUT_PATH):
+    # Initialize counters
+    stats = {
+        "pictures": 0,
+        "videos": 0,
+        "unknown": 0,
+        "processed": 0,
+        "total": len(files)
+    }
+
+    # Process files one by one with real-time updates
+    for file_name in files:
         file_path = os.path.join(INPUT_PATH, file_name)
-
-        if os.path.isfile(file_path):
-            from shared import classify_file, get_destination_folder
-            import shutil
-
-            file_type, orientation = classify_file(file_path)
-            destination_folder = get_destination_folder(
-                file_name, file_type, orientation, folders
+        
+        # Classify file
+        file_type, orientation = classify_file(file_path)
+        destination_folder = get_destination_folder(file_name, file_type, orientation, folders)
+        
+        # Update statistics
+        if file_type == FileType.PHOTO:
+            stats["pictures"] += 1
+        elif file_type == FileType.VIDEO:
+            stats["videos"] += 1
+        else:
+            stats["unknown"] += 1
+        
+        stats["processed"] += 1
+        
+        # Move file to destination
+        if destination_folder:
+            dest_path = os.path.join(destination_folder, file_name)
+            shutil.move(file_path, dest_path)
+            
+            # Send real-time progress updates
+            await websocket.send_text(f"event-processed-pictures:{stats['pictures']}")
+            await websocket.send_text(f"event-processed-videos:{stats['videos']}")
+            
+            # Log the processing
+            print(
+                f"File: {file_name}\n\t- Type: {file_emoji[file_type]}{file_type}\n\t- Orientation: {orientation if orientation else 'N/A'}\n\t- Dest.: {dest_path}"
             )
-
-            # Update statistics and send progress
-            if file_type == FileType.PHOTO:
-                n_pictures += 1
-                await websocket.send_text(f"event-processed-pictures:{n_pictures}")
-            elif file_type == FileType.VIDEO:
-                n_videos += 1
-                await websocket.send_text(f"event-processed-videos:{n_videos}")
-            else:
-                n_unknown += 1
-
-            # Move file to the appropriate folder
-            if destination_folder:
-                dest_path = os.path.join(destination_folder, file_name)
-                shutil.move(file_path, dest_path)
-                print(
-                    f"File: {file_name}\n\t- Type: {file_emoji[file_type]}{file_type}\n\t- Orientation: {orientation if orientation else 'N/A'}\n\t- Dest.: {dest_path}"
-                )
-                await websocket.send_text(
-                    f"event-processed:File: <b>{file_name}</b><br> - Type: <b>{file_emoji[file_type]}{file_type}</b><br>{f' - Orientation: <b>{orientation}</b><br>' if orientation else ''} - Dest.: {dest_path}"
-                )
+            
+            # Send detailed processing info to frontend
+            await websocket.send_text(
+                f"event-processed:File: <b>{file_name}</b><br> - Type: <b>{file_emoji[file_type]}{file_type}</b><br>{f' - Orientation: <b>{orientation}</b><br>' if orientation else ''} - Dest.: {dest_path}"
+            )
 
     # Change ownership of output folder
     print(f"Changing ownership of output folder: {base_output_folder}")
@@ -116,7 +112,7 @@ async def process_folder(path, websocket: WebSocket):
         )
 
     await websocket.send_text(
-        f"<h6 style='color: green'>Done!</h6>{file_emoji[FileType.PHOTO]} Pictures: <b>{n_pictures}</b><br>{file_emoji[FileType.VIDEO]} Videos: <b>{n_videos}</b><br>{file_emoji[FileType.UNKNOWN]} Unknown: <b>{n_unknown}</b>"
+        f"<h6 style='color: green'>Done!</h6>{file_emoji[FileType.PHOTO]} Pictures: <b>{stats['pictures']}</b><br>{file_emoji[FileType.VIDEO]} Videos: <b>{stats['videos']}</b><br>{file_emoji[FileType.UNKNOWN]} Unknown: <b>{stats['unknown']}</b>"
     )
 
 

@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     libxdamage1 \
     libxfixes3 \
     libxinerama1 \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
