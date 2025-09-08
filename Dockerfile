@@ -2,9 +2,25 @@ FROM python:3.11-slim
 
 # Install dependencies for OpenCV and system tools
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1-mesa-dev \
+    libgles2-mesa-dev \
     libglib2.0-0 \
-    sudo
+    libgthread-2.0-0 \
+    libgtk-3-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libglu1-mesa \
+    libxi6 \
+    libxrandr2 \
+    libxss1 \
+    libxcursor1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxinerama1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -23,6 +39,10 @@ COPY src/templates /app/src/templates
 COPY src/__init__.py /app/src/__init__.py
 COPY src/server.py /app/src/server.py
 COPY src/shared.py /app/src/shared.py
+COPY src/cli.py /app/src/cli.py
+
+# Set Python path to include the /app directory
+ENV PYTHONPATH="/app"
 
 # Expose the port the app runs on
 EXPOSE 3333

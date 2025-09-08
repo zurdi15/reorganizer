@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from shared import (
+from src.shared import (
     FileType,
     create_output_folders_server,
     process_files,
