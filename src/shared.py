@@ -54,7 +54,8 @@ def classify_file(file_path):
         with Image.open(file_path) as img:
             width, height = img.size
             return FileType.PHOTO, Orientation.NULL
-    except (IOError, SyntaxError):
+    except (IOError, SyntaxError, ValueError):
+        # ValueError can be raised by PIL for images with invalid dimensions (e.g., corrupted TIFF files)
         pass
 
     # Check if the file is a video
