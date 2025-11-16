@@ -14,7 +14,7 @@ echo -e "${GREEN}🚀 Building Reorganizer Application${NC}"
 
 # Build the Docker image
 echo -e "${YELLOW}📦 Building Docker image...${NC}"
-docker build -t reorganizer:latest .
+docker build -t zurdi15/reorganizer:latest .
 
 echo -e "${GREEN}✅ Docker image built successfully${NC}"
 
