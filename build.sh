@@ -4,6 +4,8 @@
 
 set -e
 
+VERSION=${1}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -15,11 +17,13 @@ echo -e "${GREEN}🚀 Building Reorganizer Application${NC}"
 # Build the Docker image
 echo -e "${YELLOW}📦 Building Docker image...${NC}"
 docker build -t zurdi15/reorganizer:latest .
+docker build -t zurdi15/reorganizer:${VERSION} .
 
 echo -e "${GREEN}✅ Docker image built successfully${NC}"
 
 # Push the Docker image
 echo -e "${YELLOW}📦 Pushing Docker image...${NC}"
 docker push zurdi15/reorganizer:latest
+docker push zurdi15/reorganizer:${VERSION}
 
 echo -e "${GREEN}✅ Docker image pushed successfully${NC}"
