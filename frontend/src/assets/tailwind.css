@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* Custom utilities - Dark Mode Theme */
+@utility btn-primary {
+  @apply rounded-lg bg-amber-600 px-6 py-3 font-semibold text-white shadow-md transition-all hover:bg-amber-700 hover:shadow-lg hover:shadow-amber-900/50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-amber-600;
+}
+
+@utility input-base {
+  @apply w-full rounded-lg border border-gray-600 bg-gray-700 px-4 py-2 text-white placeholder-gray-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50;
+}
+
+@utility input-error {
+  @apply border-red-500 focus:border-red-500 focus:ring-red-500/50;
+}
+
+@utility card {
+  @apply rounded-lg border border-gray-700 bg-gray-800/90 backdrop-blur-sm p-4 shadow-lg;
+}
+
+/* Custom scrollbar styles */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #4b5563 #1f2937;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #1f2937;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}

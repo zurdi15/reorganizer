@@ -1,114 +1,176 @@
-# File Reorganizer
+# File Reorganizer 📁
 
-A tool to automatically organize photos and videos into a structured folder hierarchy based on file type, orientation, and device type.
+Herramienta web para organizar automáticamente fotos y videos en una estructura jerárquica basada en tipo de archivo, orientación y dispositivo.
 
-## Features
+## 🎯 ¿Qué hace?
 
-- **File Classification**: Automatically detects photos and videos
-- **Orientation Detection**: Identifies horizontal vs vertical videos
-- **Device Detection**: Distinguishes between phone and drone (DJI) content
-- **Structured Organization**: Creates organized folder hierarchies
-- **Ownership Management**: Sets proper file ownership using USER_ID environment variable
-- **Dual Interface**: Available as both CLI tool and web interface
+Organiza tus archivos multimedia de forma inteligente:
 
-## Environment Variables
+- **🖼️ Fotos y 🎞️ Videos**: Detecta y clasifica automáticamente
+- **📐 Orientación**: Distingue horizontal vs vertical
+- **📱 Dispositivo**: Identifica contenido de teléfono vs dron (DJI Mini 3)
+- **🗂️ Estructura**: Crea carpetas organizadas por año/mes/país
 
-- `USER_ID`: User ID for ownership changes (default: 1000)
-- `INPUT`: Input path for web interface (default: /input)
-- `OUTPUT`: Output path for web interface (default: /output)
+## 🚀 Inicio Rápido
 
-## Usage
+### Con Docker (Recomendado)
 
-### Command Line Interface
-
-```bash
-# Set user ID for ownership
-export USER_ID=1000
-
-# Basic usage
-python3 src/cli.py --year 2023 --path hungary
-
-# With month specification
-python3 src/cli.py --year 2023 --month 12 --path croatia
-```
-
-### Web Interface
-
-#### Local Development
-```bash
-# Run the FastAPI server
-python3 src/server.py
-```
-
-#### Docker
-```bash
-# Build and run with Docker
+\`\`\`bash
 docker build -t reorganizer .
-docker run -p 3333:3333 -e USER_ID=1000 -v /path/to/input:/input -v /path/to/output:/output reorganizer
-```
+docker run -p 3333:3333 \
+  -e USER_ID=1000 \
+  -v /ruta/a/archivos/entrada:/input \
+  -v /ruta/a/archivos/salida:/output \
+  reorganizer
+\`\`\`
 
-#### Docker Compose (Recommended)
-```bash
-# Copy and edit environment variables
-cp .env.example .env
-# Edit .env with your paths and settings
+Abre tu navegador en: **http://localhost:3333**
 
-# Build and start
-./build.sh --start
+### Sin Docker
 
-# Or manually
-docker-compose up -d
-```
+**Requisitos**: Python 3.11+ y Node.js 20+
 
-#### Environment Variables for Docker
-- `USER_ID`: User ID for ownership changes (default: 1000)
-- `INPUT`: Input path inside container (default: /input)
-- `OUTPUT`: Output path inside container (default: /output)
-- `SYS_VOL_INPUT`: Host path for input files
-- `SYS_VOL_OUTPUT`: Host path for output files
-- `SYS_PORT`: Host port to expose (default: 3333)
+\`\`\`bash
+# 1. Instalar dependencias
+pip install -r requirements.txt
+cd frontend && npm install && cd ..
 
-## Folder Structure
+# 2. Construir frontend
+cd frontend && npm run build && cd ..
 
-The tool creates the following structure:
+# 3. Ejecutar servidor
+python3 backend/server.py
+\`\`\`
 
-```
-output/
-├── YEAR/
-│   ├── MM/                    # Month (if specified)
-│   │   └── COUNTRY/
-│   │       ├── photo/
-│   │       └── video/
-│   │           ├── horizontal/
-│   │           │   ├── phone/
-│   │           │   └── dron/
-│   │           │       └── mini3/
-│   │           └── vertical/
-│   │               ├── phone/
-│   │               └── dron/
-│   │                   └── mini3/
-│   └── COUNTRY/               # When no month specified
-│       └── [same structure]
-```
+Abre tu navegador en: **http://localhost:3333**
 
-## Architecture
+## 📖 Cómo Usar
 
-- `shared.py`: Common functionality used by both CLI and server
-- `cli.py`: Command-line interface with year/month structure
-- `server.py`: FastAPI web interface with WebSocket progress updates
-- `Dockerfile`: Container configuration with all dependencies
+### Interfaz Web
 
-## File Types Supported
+1. **Archivos de entrada**: La aplicación muestra automáticamente los archivos encontrados en \`/input\`
+   - 🖼️ Fotos (JPG, PNG, HEIC, etc.)
+   - 🎞️ Videos (MP4, MOV, AVI, etc.)
 
-- **Photos**: JPG, PNG, and other image formats supported by PIL
-- **Videos**: MP4, AVI, MOV, and other formats supported by OpenCV
-- **Device Detection**: DJI drone files identified by "dji_fly" prefix
+2. **Ruta de salida**: Especifica dónde organizar los archivos
+   - Formato: \`año/mes/ubicación\` (ej: \`2024/08/croatia\`)
+   - El explorador de carpetas muestra las rutas disponibles
+   - Puedes navegar por carpetas haciendo clic
 
-## Ownership Management
+3. **Organizar**: Haz clic en "Organize Files"
+   - Verás el progreso en tiempo real
+   - Estadísticas actualizadas: fotos, videos, errores
+   - Logs detallados de cada archivo procesado
 
-The tool automatically changes file ownership using the `USER_ID` environment variable:
+### Estructura de Salida
 
-1. **Input Path**: Ownership changed before processing (critical - will exit on failure)
-2. **Output Path**: Ownership changed after processing (warning on failure)
+Los archivos se organizan automáticamente:
 
-This is especially useful when running in Docker containers where files might be created with root ownership.
+\`\`\`
+/output/
+└── 2024/
+    └── 08/
+        └── croatia/
+            ├── photo/
+            │   ├── imagen1.jpg
+            │   └── imagen2.png
+            └── video/
+                ├── horizontal/
+                │   ├── phone/
+                │   │   └── video1.mp4
+                │   └── dron/
+                │       └── mini3/
+                │           └── aereo1.mp4
+                └── vertical/
+                    ├── phone/
+                    │   └── video2.mp4
+                    └── dron/
+                        └── mini3/
+                            └── aereo2.mp4
+\`\`\`
+
+## ⚙️ Configuración
+
+### Variables de Entorno
+
+Crea un archivo \`backend/.env\`:
+
+\`\`\`bash
+# Carpetas de trabajo
+INPUT=/input           # Carpeta con archivos a organizar
+OUTPUT=/output         # Carpeta donde se organizarán
+
+# Permisos (para Docker)
+USER_ID=1000          # ID del usuario propietario de los archivos
+
+# Puerto del servidor
+DEV_PORT=3333         # Puerto web (default: 3333)
+\`\`\`
+
+### Volúmenes Docker
+
+Monta tus carpetas locales:
+
+\`\`\`bash
+-v /home/usuario/Descargas:/input          # Archivos a organizar
+-v /home/usuario/Fotos:/output             # Destino organizado
+\`\`\`
+
+## 🔧 Herramienta CLI
+
+También puedes usar la herramienta desde línea de comandos:
+
+\`\`\`bash
+# Organizar archivos manualmente
+export USER_ID=1000
+python3 backend/cli.py --year 2024 --path croatia
+
+# Con mes específico
+python3 backend/cli.py --year 2024 --month 08 --path croatia/split
+\`\`\`
+
+El CLI organiza los archivos del \`/input\` configurado y crea la estructura en \`/output/año/mes/path\`.
+
+## ❓ Preguntas Frecuentes
+
+### ¿Qué tipos de archivo soporta?
+
+- **Fotos**: JPG, JPEG, PNG, HEIC, HEIF, BMP, TIFF, WebP
+- **Videos**: MP4, MOV, AVI, MKV, FLV, WMV, M4V, 3GP
+
+### ¿Cómo detecta la orientación?
+
+Lee los metadatos del video (ancho vs alto) para determinar si es horizontal (landscape) o vertical (portrait).
+
+### ¿Cómo reconoce drones DJI?
+
+Busca patrones en el nombre del archivo (ej: \`DJI_\`, \`MINI3_\`) y metadatos EXIF del dispositivo.
+
+### ¿Qué pasa con archivos no reconocidos?
+
+Se copian a una carpeta \`unknown/\` dentro de la ruta especificada, sin eliminarlos del origen.
+
+### ¿Los archivos se mueven o se copian?
+
+Por defecto se **mueven** (se eliminan del origen). Los archivos originales desaparecen de \`/input\`.
+
+### ¿Puedo cancelar una operación en curso?
+
+Actualmente no. La operación se completa una vez iniciada. Cierra el navegador si es necesario, pero algunos archivos ya habrán sido movidos.
+
+## 🎨 Características de la Interfaz
+
+- **🌙 Tema Oscuro**: Diseño moderno con colores oscuros
+- **⚡ Tiempo Real**: Actualizaciones WebSocket sin recargar
+- **📊 Estadísticas en Vivo**: Contador de archivos procesados
+- **🔍 Explorador de Carpetas**: Navega por la estructura existente
+- **📱 Responsive**: Funciona en móvil, tablet y escritorio
+- **📋 Logs Detallados**: Ve el procesamiento de cada archivo
+
+## 📄 Licencia
+
+Uso personal. Ver [LICENSE](LICENSE) para más detalles.
+
+---
+
+Para instrucciones de desarrollo, consulta [DEVELOPER_README.md](DEVELOPER_README.md)

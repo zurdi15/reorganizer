@@ -145,19 +145,25 @@ def change_ownership_input(input_path):
     """Change ownership of input path using USER_ID environment variable"""
     user_id = get_user_id()
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
                 "sudo",
+                "-n",  # non-interactive - don't ask for password
                 "chown",
                 "-R",
                 f"{user_id}:{user_id}",
                 input_path,
             ],
-            check=True,
+            capture_output=True,
+            text=True,
         )
-        print(f"Input path ownership changed successfully to {user_id}:{user_id}")
-        return True
-    except subprocess.CalledProcessError as e:
+        if result.returncode == 0:
+            print(f"Input path ownership changed successfully to {user_id}:{user_id}")
+            return True
+        else:
+            print(f"Could not change input path ownership (sudo not configured or not needed)")
+            return False
+    except Exception as e:
         print(f"Error changing input path ownership: {e}")
         return False
 
@@ -166,19 +172,25 @@ def change_ownership_output(output_path):
     """Change ownership of output path using USER_ID environment variable"""
     user_id = get_user_id()
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
                 "sudo",
+                "-n",  # non-interactive - don't ask for password
                 "chown",
                 "-R",
                 f"{user_id}:{user_id}",
                 output_path,
             ],
-            check=True,
+            capture_output=True,
+            text=True,
         )
-        print(f"Output path ownership changed successfully to {user_id}:{user_id}")
-        return True
-    except subprocess.CalledProcessError as e:
+        if result.returncode == 0:
+            print(f"Output path ownership changed successfully to {user_id}:{user_id}")
+            return True
+        else:
+            print(f"Could not change output path ownership (sudo not configured or not needed)")
+            return False
+    except Exception as e:
         print(f"Error changing output path ownership: {e}")
         return False
 

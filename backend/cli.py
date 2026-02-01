@@ -1,6 +1,6 @@
 import argparse
 
-from src.shared import (
+from shared import (
     change_ownership_input,
     change_ownership_output,
     create_output_folders_cli,

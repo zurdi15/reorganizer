@@ -1,13 +1,15 @@
 import os
 import logging
 import dotenv
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles as FS
+from fastapi.middleware.cors import CORSMiddleware
 
-from src.shared import (
+from shared import (
     FileType,
     create_output_folders_server,
     classify_file,
@@ -21,6 +23,10 @@ dotenv.load_dotenv()
 INPUT_PATH: str = os.getenv("INPUT", "/input")
 OUTPUT_PATH: str = os.getenv("OUTPUT", "/output")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+
+# Frontend dist directory (output from Vite build)
+FRONTEND_DIST = os.path.join(PROJECT_ROOT, "frontend", "dist")
 
 busy = False
 
@@ -33,10 +39,10 @@ file_emoji = {
 
 async def process_folder(path, websocket: WebSocket):
     """Process files with real-time WebSocket progress updates"""
-    # Change ownership of input path first
+    # Try to change ownership of input path (optional in dev)
     if not change_ownership_input(INPUT_PATH):
-        await websocket.send_text("event-error:Failed to change input path ownership")
-        return
+        print("Warning: Failed to change input path ownership (this is normal in dev mode)")
+        await websocket.send_text("<i>Note: Running without ownership changes (dev mode)</i>")
 
     # Create the structured output folders
     folders = create_output_folders_server(path, OUTPUT_PATH)
@@ -104,11 +110,12 @@ async def process_folder(path, websocket: WebSocket):
                 f"event-processed:File: <b>{file_name}</b><br> - Type: <b>{file_emoji[file_type]}{file_type}</b><br>{f' - Orientation: <b>{orientation}</b><br>' if orientation else ''} - Dest.: {dest_path}"
             )
 
-    # Change ownership of output folder
-    print(f"Changing ownership of output folder: {base_output_folder}")
+    # Try to change ownership of output folder (optional in dev)
+    print(f"Trying to change ownership of output folder: {base_output_folder}")
     if not change_ownership_output(base_output_folder):
+        print("Warning: Failed to change output path ownership (this is normal in dev mode)")
         await websocket.send_text(
-            "event-warning:Failed to change output path ownership"
+            "<i>Note: Output created without ownership changes (dev mode)</i>"
         )
 
     await websocket.send_text(
@@ -118,25 +125,18 @@ async def process_folder(path, websocket: WebSocket):
 
 app = FastAPI()
 
-# Montar la carpeta 'static' para servir archivos estáticos
-app.mount(
-    "/static",
-    StaticFiles(directory=os.path.join(BASE_DIR, "static")),
-    name="static",
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-# Montar el input para mostrar previsualizaciones
-app.mount("/input", StaticFiles(directory=INPUT_PATH), name="input")
-
-# Configurar la carpeta de plantillas
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 
-@app.get("/", response_class=HTMLResponse)
-def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
-
-@app.get("/input")
+# API endpoints MUST come before mounts and catch-all routes
+@app.get("/api/input")
 def get_input():
     print(f"Getting input files for {INPUT_PATH}")
     try:
@@ -148,7 +148,7 @@ def get_input():
     return dirs
 
 
-@app.get("/output")
+@app.get("/api/output")
 def get_output(subfolder: str = ""):
     print(f"Getting output tree directory for {OUTPUT_PATH}/{subfolder}")
     try:
@@ -163,6 +163,30 @@ def get_output(subfolder: str = ""):
         dirs = []
     print(f"Output: {dirs}")
     return dirs
+
+
+# Mount input folder for media previews
+app.mount("/media", StaticFiles(directory=INPUT_PATH), name="media")
+
+# Mount frontend dist directory
+if os.path.exists(FRONTEND_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="assets")
+else:
+    logging.warning(f"Frontend dist directory not found at {FRONTEND_DIST}")
+
+
+@app.get("/", response_class=HTMLResponse)
+def read_root():
+    """Serve the main HTML file for SPA"""
+    index_path = os.path.join(FRONTEND_DIST, "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r") as f:
+            return f.read()
+    else:
+        return HTMLResponse(
+            "<h1>Frontend not built</h1><p>Please run 'npm run build' in the frontend directory</p>",
+            status_code=404,
+        )
 
 
 @app.websocket("/ws/reorganizer")
@@ -212,4 +236,4 @@ async def websocket_reorganizer(websocket: WebSocket):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("DEV_PORT", 3333)), log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("DEV_PORT", 8000)), log_level="info")
