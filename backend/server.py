@@ -1,15 +1,13 @@
 import os
 import logging
 import dotenv
-from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.staticfiles import StaticFiles as FS
 from fastapi.middleware.cors import CORSMiddleware
 
-from shared import (
+from backend.shared import (
     FileType,
     create_output_folders_server,
     classify_file,
@@ -20,8 +18,8 @@ from shared import (
 import shutil
 
 dotenv.load_dotenv()
-INPUT_PATH: str = os.getenv("INPUT", "/input")
-OUTPUT_PATH: str = os.getenv("OUTPUT", "/output")
+INPUT_PATH: str = "/input"
+OUTPUT_PATH: str = "/output"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
@@ -165,16 +163,6 @@ def get_output(subfolder: str = ""):
     return dirs
 
 
-# Mount input folder for media previews
-app.mount("/media", StaticFiles(directory=INPUT_PATH), name="media")
-
-# Mount frontend dist directory
-if os.path.exists(FRONTEND_DIST):
-    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="assets")
-else:
-    logging.warning(f"Frontend dist directory not found at {FRONTEND_DIST}")
-
-
 @app.get("/", response_class=HTMLResponse)
 def read_root():
     """Serve the main HTML file for SPA"""
@@ -231,6 +219,22 @@ async def websocket_reorganizer(websocket: WebSocket):
             await websocket.close()
         except RuntimeError:
             pass
+
+
+# Mount static files AFTER all routes
+# Mount input folder for media previews
+app.mount("/media", StaticFiles(directory=INPUT_PATH), name="media")
+
+# Mount frontend dist directory
+if os.path.exists(FRONTEND_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="assets")
+else:
+    logging.warning(f"Frontend dist directory not found at {FRONTEND_DIST}")
+
+# Mount public files (logos, etc) - must be last as it catches remaining paths
+public_dir = os.path.join(PROJECT_ROOT, "frontend", "public")
+if os.path.exists(public_dir):
+    app.mount("/", StaticFiles(directory=public_dir, html=False), name="public")
 
 
 if __name__ == "__main__":

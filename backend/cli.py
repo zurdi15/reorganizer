@@ -1,6 +1,6 @@
 import argparse
 
-from shared import (
+from backend.shared import (
     change_ownership_input,
     change_ownership_output,
     create_output_folders_cli,
