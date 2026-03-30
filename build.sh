@@ -1,29 +1,17 @@
 #!/bin/bash
+set -euo pipefail
 
-# Build and deploy reorganizer application
+VERSION=${1:?Usage: ./build.sh <version> (e.g. v1.1.0)}
+REPO="ghcr.io/zurdi15/reorganizer"
 
-set -e
+echo "🔐 Logging into GHCR..."
+echo "${GITHUB_TOKEN:?Set GITHUB_TOKEN}" | docker login ghcr.io -u zurdi15 --password-stdin
 
-VERSION=${1}
+echo "📦 Building ${VERSION}..."
+docker build -t "${REPO}:${VERSION}" -t "${REPO}:latest" .
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+echo "🚀 Pushing..."
+docker push "${REPO}:${VERSION}"
+docker push "${REPO}:latest"
 
-echo -e "${GREEN}🚀 Building Reorganizer Application${NC}"
-
-# Build the Docker image
-echo -e "${YELLOW}📦 Building Docker image...${NC}"
-docker build -t zurdi15/reorganizer:latest .
-docker build -t zurdi15/reorganizer:${VERSION} .
-
-echo -e "${GREEN}✅ Docker image built successfully${NC}"
-
-# Push the Docker image
-echo -e "${YELLOW}📦 Pushing Docker image...${NC}"
-docker push zurdi15/reorganizer:latest
-docker push zurdi15/reorganizer:${VERSION}
-
-echo -e "${GREEN}✅ Docker image pushed successfully${NC}"
+echo "✅ Done: ${REPO}:${VERSION}"
