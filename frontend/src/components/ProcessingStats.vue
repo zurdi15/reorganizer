@@ -1,6 +1,22 @@
 <template>
   <div class="space-y-4">
-    <h2 class="text-lg font-semibold text-white">Processing Statistics</h2>
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold text-white">Processing Statistics</h2>
+      <span
+        v-if="processingStore.isProcessing"
+        class="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-medium text-amber-400"
+      >
+        <span class="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+        Running
+      </span>
+      <span
+        v-else-if="processingStore.stats.total > 0"
+        class="inline-flex items-center gap-1.5 rounded-full bg-green-500/20 px-3 py-1 text-xs font-medium text-green-400"
+      >
+        <span class="h-2 w-2 rounded-full bg-green-400" />
+        Complete
+      </span>
+    </div>
 
     <!-- Main progress card -->
     <div class="card space-y-3">
@@ -8,14 +24,14 @@
         <span class="text-sm font-medium text-gray-300">Progress</span>
         <span class="text-xl font-bold text-amber-400">{{ completionPercentage }}%</span>
       </div>
-      
+
       <div class="h-3 overflow-hidden rounded-full bg-gray-700">
         <div
           class="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-600 transition-all duration-300 shadow-lg shadow-amber-500/50"
           :style="{ width: `${completionPercentage}%` }"
         />
       </div>
-      
+
       <div class="text-sm text-gray-400">
         {{ processingStore.stats.processed }} of {{ processingStore.stats.total }} files processed
       </div>

@@ -23,10 +23,7 @@ describe('ProcessingStore', () => {
   it('starts processing', () => {
     const store = useProcessingStore()
     store.startProcessing()
-
     expect(store.isProcessing).toBe(true)
-    expect(store.logs).toEqual([])
-    expect(store.errors).toEqual([])
   })
 
   it('stops processing', () => {
@@ -35,6 +32,54 @@ describe('ProcessingStore', () => {
     expect(store.isProcessing).toBe(true)
 
     store.stopProcessing()
+    expect(store.isProcessing).toBe(false)
+  })
+
+  it('resets state for new job', () => {
+    const store = useProcessingStore()
+    store.addLog('old log')
+    store.addError('old error')
+    store.updateStats({ total: 5, processed: 3 })
+
+    store.resetForNewJob()
+
+    expect(store.isProcessing).toBe(true)
+    expect(store.logs).toEqual([])
+    expect(store.errors).toEqual([])
+    expect(store.stats.total).toBe(0)
+    expect(store.stats.processed).toBe(0)
+  })
+
+  it('applies state sync from server', () => {
+    const store = useProcessingStore()
+
+    store.applyStateSync({
+      status: 'processing',
+      stats: { total: 20, processed: 10, pictures: 6, videos: 3, unknown: 1, errors: 0 },
+      logs: ['log1', 'log2'],
+      errors: [],
+      output_path: '2024/08/trip',
+    })
+
+    expect(store.isProcessing).toBe(true)
+    expect(store.stats.total).toBe(20)
+    expect(store.stats.processed).toBe(10)
+    expect(store.stats.pictures).toBe(6)
+    expect(store.logs).toEqual(['log1', 'log2'])
+  })
+
+  it('applies state sync for idle status', () => {
+    const store = useProcessingStore()
+    store.startProcessing()
+
+    store.applyStateSync({
+      status: 'idle',
+      stats: { total: 0, processed: 0, pictures: 0, videos: 0, unknown: 0, errors: 0 },
+      logs: [],
+      errors: [],
+      output_path: '',
+    })
+
     expect(store.isProcessing).toBe(false)
   })
 

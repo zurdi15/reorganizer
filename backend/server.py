@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 import dotenv
 
@@ -9,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.shared import (
     FileType,
+    Orientation,
     create_output_folders_server,
     classify_file,
     get_destination_folder,
@@ -23,10 +25,7 @@ OUTPUT_PATH: str = "/output"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
-# Frontend dist directory (output from Vite build)
 FRONTEND_DIST = os.path.join(PROJECT_ROOT, "frontend", "dist")
-
-busy = False
 
 file_emoji = {
     FileType.PHOTO: "🖼️",
@@ -35,12 +34,94 @@ file_emoji = {
 }
 
 
-async def process_folder(path, websocket: WebSocket):
-    """Process files with real-time WebSocket progress updates"""
-    # Try to change ownership of input path (optional in dev)
+# ---------------------------------------------------------------------------
+# Server-side processing state (persists across WS connections)
+# ---------------------------------------------------------------------------
+class ProcessingState:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.status: str = "idle"  # idle | processing | complete | error
+        self.stats: dict = {
+            "total": 0,
+            "processed": 0,
+            "pictures": 0,
+            "videos": 0,
+            "unknown": 0,
+            "errors": 0,
+        }
+        self.logs: list[str] = []
+        self.errors: list[str] = []
+        self.output_path: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "status": self.status,
+            "stats": self.stats.copy(),
+            "logs": list(self.logs),
+            "errors": list(self.errors),
+            "output_path": self.output_path,
+        }
+
+
+state = ProcessingState()
+connected_clients: set[WebSocket] = set()
+processing_task: asyncio.Task | None = None
+
+
+# ---------------------------------------------------------------------------
+# Broadcast helpers
+# ---------------------------------------------------------------------------
+async def broadcast(message: str):
+    """Send a message to all connected WebSocket clients. Silently remove dead ones."""
+    dead = set()
+    for ws in connected_clients:
+        try:
+            await ws.send_text(message)
+        except Exception:
+            dead.add(ws)
+    connected_clients.difference_update(dead)
+
+
+async def broadcast_json(data: dict):
+    """Send a JSON message to all connected WebSocket clients."""
+    dead = set()
+    for ws in connected_clients:
+        try:
+            await ws.send_json(data)
+        except Exception:
+            dead.add(ws)
+    connected_clients.difference_update(dead)
+
+
+async def send_state_sync(ws: WebSocket):
+    """Send the full current state to a single client."""
+    try:
+        await ws.send_json({"type": "state-sync", "data": state.to_dict()})
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Background processing
+# ---------------------------------------------------------------------------
+async def process_folder_background(path: str):
+    """Process files in a background task, broadcasting updates to all clients."""
+    global state
+
+    state.reset()
+    state.status = "processing"
+    state.output_path = path
+
+    await broadcast_json({"type": "status", "data": "processing"})
+
+    # Change ownership of input path (optional in dev)
     if not change_ownership_input(INPUT_PATH):
         print("Warning: Failed to change input path ownership (this is normal in dev mode)")
-        await websocket.send_text("<i>Note: Running without ownership changes (dev mode)</i>")
+        log_msg = "<i>Note: Running without ownership changes (dev mode)</i>"
+        state.logs.append(log_msg)
+        await broadcast_json({"type": "log", "data": log_msg})
 
     # Create the structured output folders
     folders = create_output_folders_server(path, OUTPUT_PATH)
@@ -52,78 +133,115 @@ async def process_folder(path, websocket: WebSocket):
     try:
         files = [f for f in os.listdir(INPUT_PATH) if os.path.isfile(os.path.join(INPUT_PATH, f))]
     except FileNotFoundError:
-        await websocket.send_text("event-error:Input directory not found")
+        error_msg = "Input directory not found"
+        state.errors.append(error_msg)
+        state.stats["errors"] += 1
+        state.status = "error"
+        await broadcast_json({"type": "error", "data": error_msg})
+        await broadcast_json({"type": "status", "data": "error"})
         return
 
     if not files:
-        await websocket.send_text("<b>No files to process.</b>")
+        log_msg = "<b>No files to process.</b>"
+        state.logs.append(log_msg)
+        state.status = "complete"
+        await broadcast_json({"type": "log", "data": log_msg})
+        await broadcast_json({"type": "status", "data": "complete"})
         return
 
-    # Send total count
-    await websocket.send_text(f"event-total:{len(files)}")
+    state.stats["total"] = len(files)
+    await broadcast_json({"type": "total", "data": len(files)})
 
-    # Initialize counters
-    stats = {
-        "pictures": 0,
-        "videos": 0,
-        "unknown": 0,
-        "processed": 0,
-        "total": len(files)
-    }
-
-    # Process files one by one with real-time updates
+    # Process files one by one
     for file_name in files:
         file_path = os.path.join(INPUT_PATH, file_name)
-        
-        # Classify file
-        file_type, orientation = classify_file(file_path)
+
+        # Classify file (CPU-bound, run in thread to avoid blocking the event loop)
+        file_type, orientation = await asyncio.to_thread(classify_file, file_path)
         destination_folder = get_destination_folder(file_name, file_type, orientation, folders)
-        
+
         # Update statistics
         if file_type == FileType.PHOTO:
-            stats["pictures"] += 1
+            state.stats["pictures"] += 1
         elif file_type == FileType.VIDEO:
-            stats["videos"] += 1
+            state.stats["videos"] += 1
         else:
-            stats["unknown"] += 1
-        
-        stats["processed"] += 1
-        
+            state.stats["unknown"] += 1
+
+        state.stats["processed"] += 1
+
         # Move file to destination
         if destination_folder:
             dest_path = os.path.join(destination_folder, file_name)
-            shutil.move(file_path, dest_path)
-            
-            # Send real-time progress updates
-            await websocket.send_text(f"event-processed-pictures:{stats['pictures']}")
-            await websocket.send_text(f"event-processed-videos:{stats['videos']}")
-            
-            # Log the processing
-            print(
-                f"File: {file_name}\n\t- Type: {file_emoji[file_type]}{file_type}\n\t- Orientation: {orientation if orientation else 'N/A'}\n\t- Dest.: {dest_path}"
+            await asyncio.to_thread(shutil.move, file_path, dest_path)
+
+            # Build log entry
+            orientation_part = f" - Orientation: <b>{orientation}</b><br>" if orientation else ""
+            log_msg = (
+                f"File: <b>{file_name}</b><br>"
+                f" - Type: <b>{file_emoji[file_type]}{file_type}</b><br>"
+                f"{orientation_part}"
+                f" - Dest.: {dest_path}"
             )
-            
-            # Send detailed processing info to frontend
-            await websocket.send_text(
-                f"event-processed:File: <b>{file_name}</b><br> - Type: <b>{file_emoji[file_type]}{file_type}</b><br>{f' - Orientation: <b>{orientation}</b><br>' if orientation else ''} - Dest.: {dest_path}"
+            state.logs.append(log_msg)
+
+            print(
+                f"File: {file_name}\n\t- Type: {file_emoji[file_type]}{file_type}"
+                f"\n\t- Orientation: {orientation if orientation else 'N/A'}"
+                f"\n\t- Dest.: {dest_path}"
             )
 
-    # Try to change ownership of output folder (optional in dev)
+            # Broadcast progress
+            await broadcast_json({
+                "type": "processed",
+                "data": {
+                    "log": log_msg,
+                    "stats": state.stats.copy(),
+                },
+            })
+        else:
+            # File type unknown / no destination
+            log_msg = f"File: <b>{file_name}</b><br> - Type: <b>{file_emoji.get(file_type, '📄')}{file_type}</b><br> - <span style='color:orange'>Skipped (no destination)</span>"
+            state.logs.append(log_msg)
+            await broadcast_json({
+                "type": "processed",
+                "data": {
+                    "log": log_msg,
+                    "stats": state.stats.copy(),
+                },
+            })
+
+        # Yield control so broadcasts can flush
+        await asyncio.sleep(0)
+
+    # Change ownership of output folder
     print(f"Trying to change ownership of output folder: {base_output_folder}")
     if not change_ownership_output(base_output_folder):
         print("Warning: Failed to change output path ownership (this is normal in dev mode)")
-        await websocket.send_text(
-            "<i>Note: Output created without ownership changes (dev mode)</i>"
-        )
+        log_msg = "<i>Note: Output created without ownership changes (dev mode)</i>"
+        state.logs.append(log_msg)
+        await broadcast_json({"type": "log", "data": log_msg})
 
-    await websocket.send_text(
-        f"<h6 style='color: green'>Done!</h6>{file_emoji[FileType.PHOTO]} Pictures: <b>{stats['pictures']}</b><br>{file_emoji[FileType.VIDEO]} Videos: <b>{stats['videos']}</b><br>{file_emoji[FileType.UNKNOWN]} Unknown: <b>{stats['unknown']}</b>"
+    # Final summary
+    summary = (
+        f"<h6 style='color: green'>Done!</h6>"
+        f"{file_emoji[FileType.PHOTO]} Pictures: <b>{state.stats['pictures']}</b><br>"
+        f"{file_emoji[FileType.VIDEO]} Videos: <b>{state.stats['videos']}</b><br>"
+        f"{file_emoji[FileType.UNKNOWN]} Unknown: <b>{state.stats['unknown']}</b>"
     )
+    state.logs.append(summary)
+    state.status = "complete"
+
+    await broadcast_json({"type": "log", "data": summary})
+    await broadcast_json({"type": "status", "data": "complete"})
+    print("Processing complete")
 
 
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
 app = FastAPI()
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -133,17 +251,50 @@ app.add_middleware(
 )
 
 
-# API endpoints MUST come before mounts and catch-all routes
 @app.get("/api/input")
 def get_input():
+    """List files in the input directory."""
     print(f"Getting input files for {INPUT_PATH}")
     try:
-        dirs = os.listdir(f"{INPUT_PATH}")
+        dirs = os.listdir(INPUT_PATH)
         dirs.sort()
     except FileNotFoundError:
         dirs = []
     print(f"Input: {dirs}")
     return dirs
+
+
+@app.get("/api/input/stats")
+def get_input_stats():
+    """Return input file counts broken down by type."""
+    try:
+        all_entries = os.listdir(INPUT_PATH)
+        files = [f for f in all_entries if os.path.isfile(os.path.join(INPUT_PATH, f))]
+    except FileNotFoundError:
+        return {"total": 0, "pictures": 0, "videos": 0, "unknown": 0, "files": []}
+
+    picture_extensions = {"jpg", "jpeg", "png", "gif", "bmp", "tiff", "tif", "webp", "heic", "heif"}
+    video_extensions = {"mp4", "avi", "mov", "mkv", "flv", "wmv", "m4v", "3gp", "webm", "mts"}
+
+    pictures = 0
+    videos = 0
+    unknown = 0
+
+    for f in files:
+        ext = f.rsplit(".", 1)[-1].lower() if "." in f else ""
+        if ext in picture_extensions:
+            pictures += 1
+        elif ext in video_extensions:
+            videos += 1
+        else:
+            unknown += 1
+
+    return {
+        "total": len(files),
+        "pictures": pictures,
+        "videos": videos,
+        "unknown": unknown,
+    }
 
 
 @app.get("/api/output")
@@ -163,9 +314,15 @@ def get_output(subfolder: str = ""):
     return dirs
 
 
+@app.get("/api/status")
+def get_status():
+    """Return the current processing state (REST fallback)."""
+    return state.to_dict()
+
+
 @app.get("/", response_class=HTMLResponse)
 def read_root():
-    """Serve the main HTML file for SPA"""
+    """Serve the main HTML file for SPA."""
     index_path = os.path.join(FRONTEND_DIST, "index.html")
     if os.path.exists(index_path):
         with open(index_path, "r") as f:
@@ -179,59 +336,63 @@ def read_root():
 
 @app.websocket("/ws/reorganizer")
 async def websocket_reorganizer(websocket: WebSocket):
-    global busy
+    global processing_task
 
     await websocket.accept()
-    print("WebSocket client connected")
+    connected_clients.add(websocket)
+    print(f"WebSocket client connected (total: {len(connected_clients)})")
 
-    # if busy:
-    #     await websocket.send_text("event-busy:true")
-    #     await websocket.close()
-    #     return
+    # Send current state immediately so the client catches up
+    await send_state_sync(websocket)
+
     try:
-        data = await websocket.receive_json()
-        path = data.get("path")
+        while True:
+            data = await websocket.receive_json()
+            action = data.get("action", "start")
 
-        if not path:
-            await websocket.send_text(
-                f"<b style='color: red;'>Error:</b> Invalid <b>path ({path})</b>"
-            )
-        else:
-            await process_folder(path, websocket)
+            if action == "start":
+                path = data.get("path")
+                if not path:
+                    await websocket.send_json({
+                        "type": "error",
+                        "data": f"Invalid path ({path})",
+                    })
+                    continue
+
+                # Reject if already processing
+                if state.status == "processing":
+                    await websocket.send_json({
+                        "type": "error",
+                        "data": "A processing job is already running. Please wait for it to finish.",
+                    })
+                    continue
+
+                # Launch background task
+                processing_task = asyncio.create_task(process_folder_background(path))
+
+            elif action == "sync":
+                # Client explicitly requests state sync
+                await send_state_sync(websocket)
 
     except WebSocketDisconnect:
         pass
     except Exception as e:
-        logging.error(f"Error: {e}")
-        try:
-            # busy = False
-            await websocket.send_text(f"<b style='color: red;'>Error:</b> {e}")
-            # await websocket.send_text("event-busy:false")
-            await websocket.close()
-            return
-        except RuntimeError:
-            pass
+        logging.error(f"WebSocket error: {e}")
     finally:
-        try:
-            # busy = False
-            # await websocket.send_text("event-busy:false")
-            await websocket.send_text("event-complete")
-            await websocket.close()
-        except RuntimeError:
-            pass
+        connected_clients.discard(websocket)
+        print(f"WebSocket client disconnected (total: {len(connected_clients)})")
 
 
-# Mount static files AFTER all routes
-# Mount input folder for media previews
+# ---------------------------------------------------------------------------
+# Static file mounts (AFTER all routes)
+# ---------------------------------------------------------------------------
 app.mount("/media", StaticFiles(directory=INPUT_PATH), name="media")
 
-# Mount frontend dist directory
 if os.path.exists(FRONTEND_DIST):
     app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="assets")
 else:
     logging.warning(f"Frontend dist directory not found at {FRONTEND_DIST}")
 
-# Mount public files (logos, etc) - must be last as it catches remaining paths
 public_dir = os.path.join(PROJECT_ROOT, "frontend", "public")
 if os.path.exists(public_dir):
     app.mount("/", StaticFiles(directory=public_dir, html=False), name="public")

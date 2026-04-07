@@ -56,16 +56,40 @@ export interface ProcessingStats {
 }
 
 /**
- * WebSocket message from server
+ * Input folder statistics from /api/input/stats
+ */
+export interface InputStats {
+  total: number
+  pictures: number
+  videos: number
+  unknown: number
+}
+
+/**
+ * Processing status
+ */
+export type ProcessingStatus = 'idle' | 'processing' | 'complete' | 'error'
+
+/**
+ * Full server-side state received on connect / sync
+ */
+export interface ServerState {
+  status: ProcessingStatus
+  stats: ProcessingStats
+  logs: string[]
+  errors: string[]
+  output_path: string
+}
+
+/**
+ * WebSocket JSON messages from server
  */
 export type WebSocketMessage =
+  | { type: 'state-sync'; data: ServerState }
+  | { type: 'status'; data: ProcessingStatus }
   | { type: 'total'; data: number }
-  | { type: 'processed'; data: string }
-  | { type: 'processed-pictures'; data: null }
-  | { type: 'processed-videos'; data: null }
+  | { type: 'processed'; data: { log: string; stats: ProcessingStats } }
   | { type: 'error'; data: string }
-  | { type: 'complete'; data: null }
-  | { type: 'busy'; data: boolean }
   | { type: 'log'; data: string }
 
 /**

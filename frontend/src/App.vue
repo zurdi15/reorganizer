@@ -56,10 +56,13 @@ const fileStore = useFileStore()
 const ws = useWebSocket()
 
 onMounted(async () => {
-  // Fetch initial file list
-  await fileStore.fetchInputFiles()
+  // Fetch initial file list and stats in parallel
+  await Promise.all([
+    fileStore.fetchInputFiles(),
+    fileStore.fetchInputStats(),
+  ])
 
-  // Connect to WebSocket
+  // Connect to WebSocket (persistent - will receive state-sync immediately)
   try {
     await ws.connect()
   } catch (error) {

@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useWebSocketStore } from '../stores/wsStore'
 import { useProcessingStore } from '../stores/processingStore'
 import type { WebSocketMessage } from '../types/index'
@@ -9,51 +9,22 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let messageCallbacks: ((message: WebSocketMessage) => void)[] = []
 
 /**
- * Composable for WebSocket management with auto-reconnect capability
- * Uses singleton pattern to share connection across components
+ * Composable for WebSocket management with auto-reconnect.
+ * Connection is persistent - stays open to receive broadcasts from the server.
+ * On (re)connect the server sends a state-sync with the full current state.
  */
 export const useWebSocket = () => {
   const wsStore = useWebSocketStore()
   const processingStore = useProcessingStore()
 
   /**
-   * Parse WebSocket message string into typed message
+   * Parse incoming JSON WebSocket message
    */
-  const parseMessage = (data: string): WebSocketMessage | null => {
+  const parseMessage = (raw: string): WebSocketMessage | null => {
     try {
-      // Handle prefixed messages like "event-total:100"
-      if (data.includes(':')) {
-        const colonIndex = data.indexOf(':')
-        const prefix = data.substring(0, colonIndex)
-        const value = data.substring(colonIndex + 1)
-        const eventType = prefix.replace('event-', '')
-
-        if (eventType === 'total') {
-          return { type: 'total', data: parseInt(value, 10) }
-        } else if (eventType === 'processed') {
-          return { type: 'processed', data: value }
-        } else if (eventType === 'processed-pictures') {
-          return { type: 'processed-pictures', data: null }
-        } else if (eventType === 'processed-videos') {
-          return { type: 'processed-videos', data: null }
-        } else if (eventType === 'error') {
-          return { type: 'error', data: value }
-        } else if (eventType === 'busy') {
-          return { type: 'busy', data: value === 'true' }
-        } else if (eventType === 'complete') {
-          return { type: 'complete', data: null }
-        }
-      }
-
-      // Handle other messages
-      if (data.includes('event-complete')) {
-        return { type: 'complete', data: null }
-      }
-
-      // Default: treat as log
-      return { type: 'log', data }
+      return JSON.parse(raw) as WebSocketMessage
     } catch (error) {
-      console.error('Error parsing WebSocket message:', error, data)
+      console.error('Error parsing WebSocket message:', error, raw)
       return null
     }
   }
@@ -77,49 +48,53 @@ export const useWebSocket = () => {
    */
   const handleMessage = (event: MessageEvent): void => {
     const message = parseMessage(event.data)
-    if (message) {
-      // Update stores based on message type
-      switch (message.type) {
-        case 'total':
-          processingStore.updateStats({ total: message.data })
-          break
-        case 'processed':
-          processingStore.updateStats({ processed: processingStore.stats.processed + 1 })
-          processingStore.addLog(message.data)
-          break
-        case 'processed-pictures':
-          processingStore.updateStats({ pictures: processingStore.stats.pictures + 1 })
-          break
-        case 'processed-videos':
-          processingStore.updateStats({ videos: processingStore.stats.videos + 1 })
-          break
-        case 'error':
-          processingStore.addError(message.data)
-          break
-        case 'busy':
-          if (message.data) {
-            processingStore.startProcessing()
-          } else {
-            processingStore.stopProcessing()
-          }
-          break
-        case 'complete':
-          processingStore.stopProcessing()
-          break
-        case 'log':
-          processingStore.addLog(message.data)
-          break
-      }
+    if (!message) return
 
-      // Call registered callbacks
-      messageCallbacks.forEach(cb => cb(message))
+    switch (message.type) {
+      case 'state-sync':
+        // Full state restore (on connect / reconnect)
+        processingStore.applyStateSync(message.data)
+        break
+
+      case 'status':
+        if (message.data === 'processing') {
+          processingStore.startProcessing()
+        } else {
+          processingStore.stopProcessing()
+        }
+        break
+
+      case 'total':
+        processingStore.updateStats({ total: message.data })
+        break
+
+      case 'processed':
+        processingStore.updateStats(message.data.stats)
+        processingStore.addLog(message.data.log)
+        break
+
+      case 'error':
+        processingStore.addError(message.data)
+        break
+
+      case 'log':
+        processingStore.addLog(message.data)
+        break
     }
+
+    // Call registered callbacks
+    messageCallbacks.forEach(cb => cb(message))
   }
 
   /**
    * Connect to WebSocket
    */
   const connect = (): Promise<void> => {
+    // If already connected, resolve immediately
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      return Promise.resolve()
+    }
+
     return new Promise((resolve, reject) => {
       try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -146,6 +121,7 @@ export const useWebSocket = () => {
         ws.onclose = () => {
           console.log('WebSocket closed')
           wsStore.setConnected(false)
+          ws = null
           attemptReconnect()
         }
       } catch (error) {
@@ -173,13 +149,12 @@ export const useWebSocket = () => {
     reconnectTimer = setTimeout(() => {
       connect().catch(err => {
         console.error('Reconnection failed:', err)
-        attemptReconnect()
       })
     }, delay)
   }
 
   /**
-   * Send message through WebSocket
+   * Send a JSON command through WebSocket
    */
   const send = (data: Record<string, unknown>): void => {
     if (ws && ws.readyState === WebSocket.OPEN) {

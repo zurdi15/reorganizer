@@ -1,6 +1,28 @@
 <template>
   <div class="space-y-2">
     <h2 class="text-lg font-semibold text-white">Input Files</h2>
+
+    <!-- Input stats summary -->
+    <div v-if="inputStats.total > 0" class="card flex items-center justify-between gap-4 py-3">
+      <div class="flex items-center gap-2 text-sm text-gray-300">
+        <span class="font-medium text-white">{{ inputStats.total }}</span> files
+      </div>
+      <div class="flex items-center gap-4 text-sm">
+        <span class="flex items-center gap-1">
+          <span>🖼️</span>
+          <span class="text-blue-400 font-medium">{{ inputStats.pictures }}</span>
+        </span>
+        <span class="flex items-center gap-1">
+          <span>🎞️</span>
+          <span class="text-purple-400 font-medium">{{ inputStats.videos }}</span>
+        </span>
+        <span v-if="inputStats.unknown > 0" class="flex items-center gap-1">
+          <span>📄</span>
+          <span class="text-gray-400 font-medium">{{ inputStats.unknown }}</span>
+        </span>
+      </div>
+    </div>
+
     <div class="card">
       <div v-if="isLoading" class="flex justify-center py-8">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
@@ -40,17 +62,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useFileStore } from '../stores/fileStore'
-// Preview disabled for now
-// import { usePreviewStore } from '../stores/previewStore'
 import type { File } from '../types/index'
 
 const fileStore = useFileStore()
-// const previewStore = usePreviewStore()
 
 const files = computed(() => fileStore.files)
 const selectedFile = computed(() => fileStore.selectedFile)
 const isLoading = computed(() => fileStore.loading)
 const error = computed(() => fileStore.error)
+const inputStats = computed(() => fileStore.inputStats)
 
 const selectFile = (file: File): void => {
   fileStore.selectFile(file)

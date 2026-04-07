@@ -36,14 +36,14 @@ const handleSubmit = async (): Promise<void> => {
     return
   }
 
-  processingStore.startProcessing()
+  processingStore.resetForNewJob()
 
   try {
     if (!ws.isConnected.value) {
       await ws.connect()
     }
 
-    ws.send({ path: pathStore.currentPath })
+    ws.send({ action: 'start', path: pathStore.currentPath })
   } catch (error) {
     console.error('Error during organization:', error)
     processingStore.addError(`Error: ${error}`)

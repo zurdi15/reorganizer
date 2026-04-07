@@ -1,12 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { File, FileType } from '../types/index'
+import type { File, FileType, InputStats } from '../types/index'
 
 export const useFileStore = defineStore('file', () => {
   const files = ref<File[]>([])
   const selectedFile = ref<File | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const inputStats = ref<InputStats>({ total: 0, pictures: 0, videos: 0, unknown: 0 })
+
+  const baseUrl = import.meta.env.DEV ? 'http://localhost:3334' : ''
 
   /**
    * Fetch input files from the server
@@ -15,7 +18,6 @@ export const useFileStore = defineStore('file', () => {
     loading.value = true
     error.value = null
     try {
-      const baseUrl = import.meta.env.DEV ? 'http://localhost:3334' : ''
       const response = await fetch(`${baseUrl}/api/input`, {
         headers: { 'Accept': 'application/json' }
       })
@@ -23,8 +25,8 @@ export const useFileStore = defineStore('file', () => {
 
       files.value = data.map(fileName => {
         const extension = fileName.split('.').pop()?.toLowerCase() || ''
-        const pictureExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff']
-        const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'flv', 'wmv']
+        const pictureExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'heic', 'heif', 'webp']
+        const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'flv', 'wmv', 'm4v', '3gp', 'webm', 'mts']
 
         let type: FileType = 'unknown' as FileType
         if (pictureExtensions.includes(extension)) {
@@ -33,7 +35,6 @@ export const useFileStore = defineStore('file', () => {
           type = 'video' as FileType
         }
 
-        const baseUrl = import.meta.env.DEV ? 'http://localhost:3334' : ''
         return {
           name: fileName,
           type,
@@ -46,6 +47,20 @@ export const useFileStore = defineStore('file', () => {
       files.value = []
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * Fetch input file stats from the server
+   */
+  const fetchInputStats = async (): Promise<void> => {
+    try {
+      const response = await fetch(`${baseUrl}/api/input/stats`, {
+        headers: { 'Accept': 'application/json' }
+      })
+      inputStats.value = await response.json()
+    } catch (err) {
+      console.error('Failed to fetch input stats:', err)
     }
   }
 
@@ -89,7 +104,9 @@ export const useFileStore = defineStore('file', () => {
     selectedFile,
     loading,
     error,
+    inputStats,
     fetchInputFiles,
+    fetchInputStats,
     selectFile,
     clearSelection,
     imageFiles,
