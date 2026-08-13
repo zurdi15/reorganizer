@@ -1,30 +1,23 @@
-import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, URL } from 'node:url'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [vue()],
-  test: {
-    globals: true,
-    environment: 'happy-dom',
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      exclude: [
-        'node_modules/',
-        'src/__tests__/',
-      ],
-    },
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-  },
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@components': fileURLToPath(new URL('./src/components', import.meta.url)),
-      '@stores': fileURLToPath(new URL('./src/stores', import.meta.url)),
-      '@types': fileURLToPath(new URL('./src/types', import.meta.url)),
-      '@composables': fileURLToPath(new URL('./src/composables', import.meta.url)),
-      '@utils': fileURLToPath(new URL('./src/utils', import.meta.url)),
-    },
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
+  test: {
+    environment: 'happy-dom',
+    // storage funcional + limpio por test en CUALQUIER versión de Node —
+    // el porqué completo vive en el propio setup (herencia berserk)
+    setupFiles: ['./src/test/setup.ts'],
+    // zona pineada: los tests de fechas relativas (utils/format) solo son
+    // deterministas si la zona activa no depende del entorno del CI
+    env: { TZ: 'Europe/Madrid' },
+    // .worktrees/ (gitignored, usada por sesiones en paralelo) queda DENTRO
+    // del árbol del proyecto: sin la exclusión explícita, vitest correría
+    // por duplicado los tests de un checkout ajeno en marcha
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.{git,cache,output,temp}/**', '**/.worktrees/**'],
   },
 })

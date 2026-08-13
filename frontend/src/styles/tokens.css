@@ -1,0 +1,60 @@
+/* GENERADO por scripts/build-tokens.mjs — no editar a mano. */
+:root {
+  --rg-bg-void: #0C0C0E;
+  --rg-bg-stone: #141417;
+  --rg-bg-slab: #1C1C21;
+  --rg-line: #26262A;
+  --rg-line-strong: #38383E;
+  --rg-ink: #ECECEF;
+  --rg-ink-muted: #9D9DA3;
+  --rg-ink-faint: #626268;
+  --rg-accent-amber: #F5A93F;
+  --rg-accent-amber-deep: #CE8A28;
+  --rg-accent-cobalt: #5CA8FF;
+  --rg-accent-cobalt-deep: #3C7DD9;
+  --rg-ok: #4CC38A;
+  --rg-danger: #E25C4E;
+  --rg-amber-glow: rgba(245, 169, 63, 0.30);
+  --rg-scrim: rgba(12, 12, 14, 0.7);
+  --rg-slab-shadow: inset 0 1px 0 var(--rg-line);
+  --rg-radius-xs: 2px;
+  --rg-radius-sm: 6px;
+  --rg-radius-md: 10px;
+  --rg-radius-full: 9999px;
+  --rg-font-display: 'Space Grotesk', system-ui, sans-serif;
+  --rg-font-body: 'Inter Variable', system-ui, sans-serif;
+  --rg-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --rg-dur-1: 120ms;
+  --rg-dur-2: 200ms;
+  --rg-dur-3: 320ms;
+  --rg-dur-4: 600ms;
+  --rg-dur-5: 1200ms;
+  --rg-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --rg-ease-spring: cubic-bezier(0.34, 1.4, 0.44, 1);
+  --rg-ease-inout: cubic-bezier(0.45, 0, 0.55, 1);
+  --rg-ease-linear: linear;
+  --rg-z-nav: 40;
+  --rg-z-sheet: 50;
+  --rg-z-toast: 60;
+  --rg-shadow-amber: 0 0 24px var(--rg-amber-glow);
+}
+
+html.rg-light {
+  --rg-bg-void: #F4F4F5;
+  --rg-bg-stone: #FFFFFF;
+  --rg-bg-slab: #EBEBED;
+  --rg-line: #D9D9DE;
+  --rg-line-strong: #BEBEC4;
+  --rg-ink: #1B1B1F;
+  --rg-ink-muted: #5E5E64;
+  --rg-ink-faint: #8E8E94;
+  --rg-accent-amber: #996007;
+  --rg-accent-amber-deep: #7F4A05;
+  --rg-accent-cobalt: #2160BE;
+  --rg-accent-cobalt-deep: #1D4FA3;
+  --rg-ok: #177449;
+  --rg-danger: #B3382C;
+  --rg-amber-glow: rgba(153, 96, 7, 0.32);
+  --rg-scrim: rgba(27, 27, 31, 0.45);
+  --rg-slab-shadow: 0 1px 3px rgba(20, 20, 24, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}

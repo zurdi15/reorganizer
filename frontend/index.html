@@ -1,10 +1,45 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0C0C0E" />
+    <link rel="icon" type="image/svg+xml" href="/icons/reorganizer.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/pwa-192.png" />
+    <link rel="apple-touch-icon" href="/icons/pwa-192.png" />
     <title>Reorganizer</title>
+    <!--
+      Guard contra el flash de tema incorrecto (FOUC) — herencia berserk.
+      TIENE que ser un script inline y bloqueante, sin type="module" y sin
+      defer/async: main.ts es type="module" y por tanto SIEMPRE se ejecuta
+      después de que el parser ya montó el DOM y el navegador ya pintó el
+      primer frame — para cuando main.ts (vía utils/theme.ts::initTheme)
+      pudiera aplicar html.rg-light, la página ya se vio nacer en el tema
+      equivocado un instante. Este script corre SÍNCRONO mientras el parser
+      todavía está construyendo <head>, antes de que exista nada que pintar.
+
+      Los hex #0C0C0E / #F4F4F5 de abajo DUPLICAN a propósito
+      themes.dark['bg-void'] / themes.light['bg-void'] de tokens/index.ts:
+      no se puede importar ese módulo aquí (rompería el bloqueo síncrono con
+      una carga de JS real), así que se copian a mano.
+      indexHtmlTheme.spec.ts los mantiene sincronizados automáticamente — un
+      test falla si alguno de los dos lados cambia sin el otro.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('rg:theme')
+          var mode = stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
+          var isLight = mode === 'light' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches)
+          if (isLight) document.documentElement.classList.add('rg-light')
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', isLight ? '#F4F4F5' : '#0C0C0E')
+        } catch (e) {
+          // localStorage bloqueado (privado agresivo) o matchMedia ausente:
+          // se queda en el oscuro por defecto — nunca debe romper el arranque
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

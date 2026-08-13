@@ -1,0 +1,147 @@
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { nextTick } from 'vue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import DestinationBuilder from '../DestinationBuilder.vue'
+import { createI18nInstance } from '@/i18n'
+import { useOrganizeStore } from '@/stores/organize'
+import type { OutputDir } from '@/types/api'
+
+const DIRS: OutputDir[] = [
+  { name: '2024', has_children: true },
+  { name: '2025', has_children: false },
+  { name: 'viajes', has_children: true },
+]
+
+function jsonResponse(data: unknown): Response {
+  return { ok: true, status: 200, json: async () => data } as unknown as Response
+}
+
+function mountBuilder() {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const organize = useOrganizeStore()
+  const wrapper = mount(DestinationBuilder, {
+    global: { plugins: [pinia, createI18nInstance()] },
+    attachTo: document.body,
+  })
+  return { wrapper, organize }
+}
+
+describe('DestinationBuilder', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/output/dirs')) return jsonResponse(DIRS)
+        return jsonResponse([])
+      }),
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  it('Enter commits the typed segment as a chip and clears the field', async () => {
+    const { wrapper, organize } = mountBuilder()
+    const input = wrapper.get('input')
+    await input.setValue('croacia')
+    await input.trigger('keydown', { key: 'Enter' })
+
+    expect(organize.destSegments).toEqual(['croacia'])
+    const chips = wrapper.findAll('[data-testid="dest-chip"]')
+    expect(chips).toHaveLength(1)
+    expect(chips[0].text()).toContain('croacia')
+    expect((input.element as HTMLInputElement).value).toBe('')
+    // la preview de ruta completa refleja lo confirmado
+    expect(wrapper.get('[data-testid="dest-preview"]').text()).toContain('/output/croacia/')
+  })
+
+  it('typing / commits the pending segment (chaining), and an unmatched value commits too', async () => {
+    const { wrapper, organize } = mountBuilder()
+    const input = wrapper.get('input')
+    // "carpeta-nueva" no existe en /output/dirs: se confirma igual — crear
+    // carpeta nueva ES el caso de uso
+    await input.setValue('carpeta-nueva/')
+    expect(organize.destSegments).toEqual(['carpeta-nueva'])
+    expect((input.element as HTMLInputElement).value).toBe('')
+
+    await input.setValue('2024/08')
+    expect(organize.destSegments).toEqual(['carpeta-nueva', '2024'])
+    expect((input.element as HTMLInputElement).value).toBe('08')
+  })
+
+  it('rejects invalid segments with an inline error, keeping what was typed', async () => {
+    const { wrapper, organize } = mountBuilder()
+    const input = wrapper.get('input')
+    await input.setValue('mal:nombre')
+    await input.trigger('keydown', { key: 'Enter' })
+
+    expect(organize.destSegments).toEqual([])
+    expect((input.element as HTMLInputElement).value).toBe('mal:nombre')
+    expect(wrapper.text()).toContain('Nombre de carpeta no válido.')
+  })
+
+  it('chips remove their own segment; the .. button and backspace-on-empty remove the last', async () => {
+    const { wrapper, organize } = mountBuilder()
+    organize.setFromPath('2024/08/croacia')
+    await nextTick()
+
+    // tap en el chip del medio: quita ESE segmento
+    await wrapper.findAll('[data-testid="dest-chip"]')[1].trigger('click')
+    expect(organize.destSegments).toEqual(['2024', 'croacia'])
+
+    await wrapper.get('[data-testid="dest-up"]').trigger('click')
+    expect(organize.destSegments).toEqual(['2024'])
+
+    await wrapper.get('input').trigger('keydown', { key: 'Backspace' })
+    expect(organize.destSegments).toEqual([])
+    expect(wrapper.find('[data-testid="dest-up"]').exists()).toBe(false)
+  })
+
+  it('debounces the dirs fetch (300ms) and collapses a burst of path changes into one request', async () => {
+    vi.useFakeTimers()
+    const { organize } = mountBuilder()
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+
+    // el watcher immediate programa el primer fetch; aún no ha disparado
+    await vi.advanceTimersByTimeAsync(100)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    // cambio de ruta antes de vencer el debounce: se REPROGRAMA (el timer
+    // viejo muere) — a los 350ms del arranque sigue sin haber fetch
+    organize.addSegment('2024')
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(250)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(100)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/output/dirs?path=2024', expect.anything())
+  })
+
+  it('the panel filters fetched dirs while typing and a tap commits the suggestion', async () => {
+    vi.useFakeTimers()
+    const { wrapper, organize } = mountBuilder()
+    await vi.advanceTimersByTimeAsync(300)
+    await nextTick()
+
+    const input = wrapper.get('input')
+    await input.trigger('focusin')
+    await input.setValue('20')
+    await nextTick()
+
+    const suggestions = wrapper.findAll('[data-testid="dest-suggestion"]')
+    expect(suggestions).toHaveLength(2)
+    expect(suggestions.map((s) => s.text().replace(/\s*\/$/, ''))).toEqual(['2024', '2025'])
+    // has_children pinta el sufijo '/'
+    expect(suggestions[0].text()).toContain('/')
+
+    await suggestions[0].trigger('click')
+    expect(organize.destSegments).toEqual(['2024'])
+    expect((input.element as HTMLInputElement).value).toBe('')
+  })
+})

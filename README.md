@@ -1,176 +1,107 @@
-# File Reorganizer 📁
+# Reorganizer
 
-Herramienta web para organizar automáticamente fotos y videos en una estructura jerárquica basada en tipo de archivo, orientación y dispositivo.
+Frontal web self-hosted para organizar fotos y vídeos. Subes archivos (desde el
+móvil o el navegador), eliges una carpeta destino, y Reorganizer los clasifica y
+mueve a una estructura de carpetas bajo tu librería — pensado para que
+[Immich](https://immich.app) la escanee como **librería externa** manteniendo tu
+estructura en disco.
 
-## 🎯 ¿Qué hace?
+- 📱 **PWA instalable** (Android e iOS): subida multi-selección desde la galería
+  con progreso por archivo. 100% responsive, mobile-first.
+- 🗂️ **Ruta destino libre**: `2025/08/croacia`, `2025/diario`, lo que quieras.
+  El EXIF sugiere año/mes del lote; tú compones la ruta con autocompletado del
+  árbol existente. Nunca se fuerza una estructura.
+- ⚙️ **Reglas de clasificación configurables** (editor en Ajustes): por tipo,
+  orientación, patrón de nombre o cámara. Por defecto reproduce
+  `photo/` + `video/{horizontal|vertical}/{phone|dron/mini3}` con la detección
+  DJI arreglada (funciona con `DJI_0001.MP4` y con metadata de cámara).
+- 🔍 **Dry-run siempre**: primero se planifica (leyendo EXIF/ffprobe de cada
+  archivo) y ves el plan completo — avisos de duplicados y de archivos sin
+  regla (`_unknown/`) — antes de ejecutar.
+- 🔁 **Jobs persistentes** (SQLite): historial con resultado por archivo,
+  cancelación, recuperación tras reinicio, progreso en vivo por WebSocket.
+- 🧬 **Duplicados con cabeza**: si el destino ya tiene un archivo idéntico
+  (hash), en modo mover se limpia del input; si difiere, eliges estrategia
+  (renombrar / saltar / sobrescribir).
+- 📸 **Immich**: al terminar un job lanza el escaneo de tu librería externa vía
+  API (URL + API key en Ajustes, con test de conexión y selector de librería).
 
-Organiza tus archivos multimedia de forma inteligente:
+## Arranque rápido (Docker)
 
-- **🖼️ Fotos y 🎞️ Videos**: Detecta y clasifica automáticamente
-- **📐 Orientación**: Distingue horizontal vs vertical
-- **📱 Dispositivo**: Identifica contenido de teléfono vs dron (DJI Mini 3)
-- **🗂️ Estructura**: Crea carpetas organizadas por año/mes/país
+```yaml
+# docker-compose.yml — ver docker-compose.example.yml para el archivo completo
+services:
+  reorganizer:
+    image: ghcr.io/zurdi15/reorganizer:latest
+    ports: ["8000:8000"]
+    environment:
+      PUID: 1000   # uid propietario de tus carpetas de media
+      PGID: 1000
+    volumes:
+      - ./data:/data                       # DB + caché de miniaturas
+      - /ruta/a/subidas:/input             # bandeja de entrada
+      - /ruta/a/libreria:/output           # tu librería (la que escanea Immich)
+    restart: unless-stopped
+```
 
-## 🚀 Inicio Rápido
+El contenedor arranca como root solo para ajustar el usuario interno a
+`PUID/PGID` y cede privilegios (`gosu`) antes de ejecutar la app. Nunca hace
+`chown` de `/input` ni `/output`: pon `PUID/PGID` con el dueño real de tus
+carpetas. Alternativa pure-non-root: `user: "1000:1000"` en compose (entonces
+`/data` debe ser escribible por ese uid de antemano).
 
-### Con Docker (Recomendado)
+### Variables de entorno
 
-\`\`\`bash
-docker build -t reorganizer .
-docker run -p 3333:3333 \
-  -e USER_ID=1000 \
-  -v /ruta/a/archivos/entrada:/input \
-  -v /ruta/a/archivos/salida:/output \
-  reorganizer
-\`\`\`
+| Variable | Default | Descripción |
+|---|---|---|
+| `RG_DATA_DIR` | `/data` | SQLite + miniaturas |
+| `RG_INPUT_DIR` | `/input` | Bandeja de entrada |
+| `RG_OUTPUT_DIR` | `/output` | Librería destino |
+| `RG_MAX_UPLOAD_MB` | `10240` | Límite por archivo subido (10 GiB) |
+| `RG_SERVE_STATIC` | `true` | Servir la SPA (desactivar solo en dev) |
+| `PUID` / `PGID` | `1000` | Dueño efectivo del proceso (solo Docker) |
 
-Abre tu navegador en: **http://localhost:3333**
+La configuración de Immich y los defaults de duplicados/transferencia viven en
+la base de datos y se editan desde **Ajustes** en la propia app.
 
-### Sin Docker
+## Immich
 
-**Requisitos**: Python 3.11+ y Node.js 20+
+1. En Immich, crea una **librería externa** apuntando a la misma ruta que
+   montas en `/output`.
+2. Genera una API key de un usuario **administrador** (el endpoint de escaneo
+   lo exige).
+3. En Reorganizer → Ajustes → Immich: URL, API key, «Probar conexión» y elige
+   la librería. Con el toggle activado, cada job terminado lanza el escaneo.
 
-\`\`\`bash
-# 1. Instalar dependencias
-pip install -r requirements.txt
-cd frontend && npm install && cd ..
+## Sin autenticación — léelo
 
-# 2. Construir frontend
-cd frontend && npm run build && cd ..
+Reorganizer **no tiene login**: cualquiera que alcance el puerto puede ver y
+mover tus archivos. Exponlo solo en LAN/VPN (Tailscale, WireGuard) o detrás de
+un reverse proxy con autenticación (Authelia, basic auth…). Si usas proxy:
 
-# 3. Ejecutar servidor
-python3 backend/server.py
-\`\`\`
+```nginx
+client_max_body_size 0;          # o >= RG_MAX_UPLOAD_MB
+proxy_request_buffering off;     # streaming de subidas grandes
+# y soporte de upgrade WebSocket para /api/v1/ws
+```
 
-Abre tu navegador en: **http://localhost:3333**
+## Desarrollo
 
-## 📖 Cómo Usar
+Requisitos: `uv`, Node 22+, `ffmpeg` (ffprobe) en el PATH.
 
-### Interfaz Web
+```bash
+./dev.sh all     # backend :8000 + Vite :5173 (trabaja siempre en :5173)
+./dev.sh back    # solo backend (crea ./data/{input,output})
+./dev.sh front   # solo frontend
+```
 
-1. **Archivos de entrada**: La aplicación muestra automáticamente los archivos encontrados en \`/input\`
-   - 🖼️ Fotos (JPG, PNG, HEIC, etc.)
-   - 🎞️ Videos (MP4, MOV, AVI, etc.)
+- Backend: FastAPI + SQLAlchemy 2 + Alembic (`backend/`, tests con
+  `uv run pytest`).
+- Frontend: Vue 3 + Vite 7 + Tailwind 4 con design system propio y tokens
+  generados (`frontend/`, tests con `npm test`; `npm run build` incluye los
+  guards de tokens).
+- API docs en `http://localhost:8000/api/docs`.
 
-2. **Ruta de salida**: Especifica dónde organizar los archivos
-   - Formato: \`año/mes/ubicación\` (ej: \`2024/08/croatia\`)
-   - El explorador de carpetas muestra las rutas disponibles
-   - Puedes navegar por carpetas haciendo clic
+## Licencia
 
-3. **Organizar**: Haz clic en "Organize Files"
-   - Verás el progreso en tiempo real
-   - Estadísticas actualizadas: fotos, videos, errores
-   - Logs detallados de cada archivo procesado
-
-### Estructura de Salida
-
-Los archivos se organizan automáticamente:
-
-\`\`\`
-/output/
-└── 2024/
-    └── 08/
-        └── croatia/
-            ├── photo/
-            │   ├── imagen1.jpg
-            │   └── imagen2.png
-            └── video/
-                ├── horizontal/
-                │   ├── phone/
-                │   │   └── video1.mp4
-                │   └── dron/
-                │       └── mini3/
-                │           └── aereo1.mp4
-                └── vertical/
-                    ├── phone/
-                    │   └── video2.mp4
-                    └── dron/
-                        └── mini3/
-                            └── aereo2.mp4
-\`\`\`
-
-## ⚙️ Configuración
-
-### Variables de Entorno
-
-Crea un archivo \`backend/.env\`:
-
-\`\`\`bash
-# Carpetas de trabajo
-INPUT=/input           # Carpeta con archivos a organizar
-OUTPUT=/output         # Carpeta donde se organizarán
-
-# Permisos (para Docker)
-USER_ID=1000          # ID del usuario propietario de los archivos
-
-# Puerto del servidor
-DEV_PORT=3333         # Puerto web (default: 3333)
-\`\`\`
-
-### Volúmenes Docker
-
-Monta tus carpetas locales:
-
-\`\`\`bash
--v /home/usuario/Descargas:/input          # Archivos a organizar
--v /home/usuario/Fotos:/output             # Destino organizado
-\`\`\`
-
-## 🔧 Herramienta CLI
-
-También puedes usar la herramienta desde línea de comandos:
-
-\`\`\`bash
-# Organizar archivos manualmente
-export USER_ID=1000
-python3 backend/cli.py --year 2024 --path croatia
-
-# Con mes específico
-python3 backend/cli.py --year 2024 --month 08 --path croatia/split
-\`\`\`
-
-El CLI organiza los archivos del \`/input\` configurado y crea la estructura en \`/output/año/mes/path\`.
-
-## ❓ Preguntas Frecuentes
-
-### ¿Qué tipos de archivo soporta?
-
-- **Fotos**: JPG, JPEG, PNG, HEIC, HEIF, BMP, TIFF, WebP
-- **Videos**: MP4, MOV, AVI, MKV, FLV, WMV, M4V, 3GP
-
-### ¿Cómo detecta la orientación?
-
-Lee los metadatos del video (ancho vs alto) para determinar si es horizontal (landscape) o vertical (portrait).
-
-### ¿Cómo reconoce drones DJI?
-
-Busca patrones en el nombre del archivo (ej: \`DJI_\`, \`MINI3_\`) y metadatos EXIF del dispositivo.
-
-### ¿Qué pasa con archivos no reconocidos?
-
-Se copian a una carpeta \`unknown/\` dentro de la ruta especificada, sin eliminarlos del origen.
-
-### ¿Los archivos se mueven o se copian?
-
-Por defecto se **mueven** (se eliminan del origen). Los archivos originales desaparecen de \`/input\`.
-
-### ¿Puedo cancelar una operación en curso?
-
-Actualmente no. La operación se completa una vez iniciada. Cierra el navegador si es necesario, pero algunos archivos ya habrán sido movidos.
-
-## 🎨 Características de la Interfaz
-
-- **🌙 Tema Oscuro**: Diseño moderno con colores oscuros
-- **⚡ Tiempo Real**: Actualizaciones WebSocket sin recargar
-- **📊 Estadísticas en Vivo**: Contador de archivos procesados
-- **🔍 Explorador de Carpetas**: Navega por la estructura existente
-- **📱 Responsive**: Funciona en móvil, tablet y escritorio
-- **📋 Logs Detallados**: Ve el procesamiento de cada archivo
-
-## 📄 Licencia
-
-Uso personal. Ver [LICENSE](LICENSE) para más detalles.
-
----
-
-Para instrucciones de desarrollo, consulta [DEVELOPER_README.md](DEVELOPER_README.md)
+Uso personal. Repo: [zurdi15/reorganizer](https://github.com/zurdi15/reorganizer).

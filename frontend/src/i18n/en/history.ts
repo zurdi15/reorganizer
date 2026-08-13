@@ -1,0 +1,45 @@
+export const history = {
+  title: 'History',
+  refresh: 'Refresh',
+  empty: 'No jobs yet',
+  emptyCta: 'Organize now',
+  loadFailed: 'Could not load the history.',
+  activeBanner: 'A job is in progress',
+  status: {
+    completed: 'Completed',
+    completedWithErrors: 'With errors',
+    cancelled: 'Cancelled',
+    interrupted: 'Interrupted',
+    discarded: 'Discarded',
+    failed: 'Failed',
+    inProgress: 'In progress',
+  },
+  mode: {
+    move: 'Moved',
+    copy: 'Copied',
+  },
+  counters: {
+    done: '{n} ok',
+    errors: '{n} error | {n} errors',
+    skipped: '{n} skipped | {n} skipped',
+  },
+  immich: {
+    ok: 'Immich ok',
+    failed: 'Immich failed',
+    skipped: 'Immich skipped',
+  },
+  repeat: 'Repeat with this path',
+  items: {
+    empty: 'This job has no files.',
+    errorsHeading: 'Errors',
+    loadMore: 'Load more',
+    loadFailed: 'Could not load the files.',
+    status: {
+      planned: 'pending',
+      skipped: 'skipped',
+      duplicate: 'duplicate',
+      cancelled: 'cancelled',
+      missing: 'missing',
+    },
+  },
+} as const

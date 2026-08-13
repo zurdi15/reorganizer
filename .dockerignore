@@ -1,0 +1,12 @@
+# Fuera del contexto de build: artefactos locales que engordan el contexto o
+# que la imagen genera por su cuenta (dist se compila en la etapa node).
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.egg-info
+data
+fs_mock
+.git

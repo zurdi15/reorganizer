@@ -1,4 +1,8 @@
 .venv
-fs_mock
 .env
 __pycache__
+.pytest_cache
+*.egg-info
+data/
+node_modules
+dist

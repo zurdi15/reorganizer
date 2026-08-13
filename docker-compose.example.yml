@@ -1,0 +1,27 @@
+# Ejemplo de despliegue: copia a docker-compose.yml y ajusta rutas e ids.
+services:
+  reorganizer:
+    image: ghcr.io/zurdi15/reorganizer:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000" # UI + API en http://<host>:8000
+    environment:
+      # uid/gid del dueño de tus carpetas de media en el host (`id -u` / `id -g`):
+      # el proceso corre con ellos y los archivos organizados conservan tu propiedad.
+      PUID: "1000"
+      PGID: "1000"
+    volumes:
+      # Estado de la app (DB SQLite + caché de thumbnails).
+      # También vale una carpeta local: ./data:/data
+      - reorganizer-data:/data
+      # Entrada: donde caen las subidas y lo pendiente de organizar
+      - /ruta/en/el/host/input:/input
+      # Salida: la librería organizada (la librería externa que escanea Immich)
+      - /ruta/en/el/host/library:/output
+    # El healthcheck viene definido en la imagen (GET /api/v1/health).
+    # Alternativa pure-non-root (sin PUID/PGID): descomenta `user:` y el
+    # entrypoint no tocará nada — asegúrate de que /data sea escribible por ese uid.
+    # user: "1000:1000"
+
+volumes:
+  reorganizer-data:

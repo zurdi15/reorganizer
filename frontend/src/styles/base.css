@@ -1,0 +1,161 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* puente tokens → utilidades semánticas de Tailwind: los componentes usan
+   bg-stone / text-ink / border-line, nunca colores propios */
+@theme inline {
+  --color-void: var(--rg-bg-void);
+  --color-stone: var(--rg-bg-stone);
+  --color-slab: var(--rg-bg-slab);
+  --color-line: var(--rg-line);
+  --color-line-strong: var(--rg-line-strong);
+  --color-ink: var(--rg-ink);
+  --color-ink-muted: var(--rg-ink-muted);
+  --color-ink-faint: var(--rg-ink-faint);
+  --color-amber: var(--rg-accent-amber);
+  --color-amber-deep: var(--rg-accent-amber-deep);
+  --color-cobalt: var(--rg-accent-cobalt);
+  --color-cobalt-deep: var(--rg-accent-cobalt-deep);
+  --color-ok: var(--rg-ok);
+  --color-danger: var(--rg-danger);
+  /* fondo de scrim de overlays (RgSheet) — SIEMPRE oscuro, en los dos temas
+     (ver el why-comment de `scrim` en tokens/index.ts) */
+  --color-scrim: var(--rg-scrim);
+  --font-display: var(--rg-font-display);
+  --font-body: var(--rg-font-body);
+  --font-mono: var(--rg-font-mono);
+  --radius-xs: var(--rg-radius-xs);
+  --radius-sm: var(--rg-radius-sm);
+  --radius-md: var(--rg-radius-md);
+  /* la etiqueta del nav inferior en móvil no tiene hueco para text-xs
+     (0.75rem): un escalón más chico, generado de verdad y no arbitrario,
+     para que siga siendo una utilidad real de la escala (herencia berserk,
+     ya iterado en móvil real: 0.7rem) */
+  --text-2xs: 0.7rem;
+  --text-2xs--line-height: 0.9rem;
+}
+
+/* el scroll de la app vive DENTRO del <main> del shell (h-dvh + flex-1
+   min-h-0 overflow-y-auto — ver ShellView.vue): el documento nunca desborda,
+   así que el html no fuerza scrollbar propio */
+html {
+  background: var(--rg-bg-void);
+  color-scheme: dark;
+  overflow-y: auto;
+  /* corta el pull-to-refresh de Android (y el rubber-band de overscroll): un
+     tirón hacia abajo con la app arriba del todo recargaría la página a media
+     subida y vaciaría la cola. -y none: solo neutraliza el gesto vertical de
+     recarga, sin tocar el scroll normal. */
+  overscroll-behavior-y: none;
+}
+
+/* scrollbar ámbar discreto en todas partes: thin + track transparente.
+   scrollbar-width/color en html hereda a los scrollers internos (incluido
+   el <main> del shell) sin repetir la regla. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rg-accent-amber-deep) transparent;
+}
+
+html.rg-light {
+  color-scheme: light;
+}
+
+/* reserva el hueco del scrollbar en el contenedor que de verdad scrollea,
+   para que cambiar de una vista corta a una larga no ensanche/estreche el
+   contenido en el ancho exacto de la barra */
+.rg-scroll-stable {
+  scrollbar-gutter: stable;
+  /* el scroller único de la app (el <main> del shell): contain evita que su
+     overscroll encadene al documento y reintroduzca el gesto de recarga */
+  overscroll-behavior: contain;
+}
+
+body {
+  font-family: var(--rg-font-body);
+  color: var(--rg-ink);
+  background: var(--rg-bg-void);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* NOTA deliberada (plan Reorganizer 2.0): aquí NO hay capa de ruido/niebla
+   (el body::before de berserk). El chrome de una herramienta de fotos debe
+   ser cromáticamente silencioso — cualquier textura del fondo contamina la
+   lectura de las miniaturas. Superficies planas, punto. */
+
+/* fondo canónico del chrome sticky (bandas de aviso, headers pegados) */
+.rg-chrome-bg {
+  background: var(--rg-bg-void);
+}
+
+/* losa tallada: borde fino y brillo interior superior, sin sombras blandas.
+   La clase nombra el ACABADO (losa), no el nivel de elevación — las
+   superficies base van en stone; el token slab es el nivel realzado para
+   elementos que sobresalen (CTA de subida). box-shadow tokenizado
+   (--rg-slab-shadow): en claro la fórmula entera cambia a sombra de
+   contacto + inset blanco (ver tokens/index.ts). */
+.rg-slab {
+  background: var(--rg-bg-stone);
+  border: 1px solid var(--rg-line);
+  border-radius: var(--rg-radius-sm);
+  box-shadow: var(--rg-slab-shadow);
+}
+
+:focus-visible {
+  outline: 2px solid var(--rg-accent-amber);
+  outline-offset: 2px;
+}
+
+/* el anillo global de arriba se apilaría con el borde propio en foco de los
+   controles de formulario (focus:border-amber, ver RgField/RgSelect),
+   dejando un doble borde grueso. Los controles llevan .rg-form-control y
+   quedan excluidos: el cambio de color de su propio borde ya es un único
+   indicador de foco suficiente (WCAG 2.4.7). */
+.rg-form-control:focus-visible {
+  /* transparente, no "none": en modo alto contraste forzado (Windows), el
+     navegador SÍ pinta un outline visible sobre un outline-style/width
+     reales aunque el color declarado sea transparente — con "none" no
+     quedaría ningún indicador de foco ahí */
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--rg-accent-amber-deep);
+  color: var(--rg-ink);
+}
+
+/* mono funcional: nombres de archivo, rutas, EXIF, contadores */
+.rg-metric {
+  font-family: var(--rg-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* WebKit no hereda scrollbar-width/color: van por selector universal para
+   alcanzar tanto el scroller raíz (html) como los contenedores internos con
+   su propio overflow sin repetir la regla en cada uno */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--rg-accent-amber-deep);
+  border-radius: var(--rg-radius-full);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--rg-accent-amber);
+}
+
+/* barras con scroll horizontal sin scrollbar visible: el affordance de "hay
+   más contenido" ya lo da el corte de los items. Gana por especificidad
+   sobre el *::-webkit-scrollbar de arriba. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

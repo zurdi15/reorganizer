@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      # ffprobe/ffmpeg: los tests de metadata y thumbnails de vídeo lo requieren
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: uv sync
+      - run: RG_DATA_DIR=$RUNNER_TEMP uv run alembic upgrade head
+      # alembic check: detecta drift entre models.py y las migraciones commiteadas
+      - run: RG_DATA_DIR=$RUNNER_TEMP uv run alembic check
+      - run: uv run pytest -v
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      # Gate anti-drift: tokens.css se genera desde src/tokens; si regenerarlo
+      # produce un diff, alguien tocó los tokens sin regenerar el CSS commiteado
+      - run: npm run build:tokens && git diff --exit-code src/styles/tokens.css
+      - run: npm run test
+      # build ya encadena guard:tokens, vue-tsc, vite build y guard:utilities
+      - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: docker build -t reorganizer:ci .
