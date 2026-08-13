@@ -5,7 +5,7 @@
 <h1 align="center">Reorganizer</h1>
 
 <p align="center">
-  <em>Reorganizer</em> — organiza tus fotos y vídeos en una estructura propia y deja que Immich los escanee.
+  Organiza tus fotos y vídeos en una estructura propia.
 </p>
 
 <p align="center">
