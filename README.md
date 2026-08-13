@@ -1,4 +1,17 @@
-# Reorganizer
+<p align="center">
+  <img src="docs/assets/reorganizer.svg" width="96" alt="Reorganizer logo" />
+</p>
+
+<h1 align="center">Reorganizer</h1>
+
+<p align="center">
+  <em>Reorganizer</em> — organiza tus fotos y vídeos en una estructura propia y deja que Immich los escanee.
+</p>
+
+<p align="center">
+  <a href="https://github.com/zurdi15/reorganizer/actions/workflows/ci.yml"><img src="https://github.com/zurdi15/reorganizer/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI" /></a>
+  <a href="https://github.com/zurdi15/reorganizer/releases"><img src="https://img.shields.io/github/v/release/zurdi15/reorganizer?sort=semver" alt="Release" /></a>
+</p>
 
 Frontal web self-hosted para organizar fotos y vídeos. Subes archivos (desde el
 móvil o el navegador), eliges una carpeta destino, y Reorganizer los clasifica y
