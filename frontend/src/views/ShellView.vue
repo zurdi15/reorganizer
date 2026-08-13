@@ -1,19 +1,29 @@
 <script setup lang="ts">
-// Shell de la app (port del MODELO FINAL de berserk/ShellView, no de su
-// historia — los comentarios heredados resumen las regresiones que ya se
-// pagaron allí para no repetirlas aquí).
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+// Shell de la app con identidad PROPIA de Reorganizer (herramienta de
+// fototeca / cuarto oscuro), deliberadamente DISTINTA del shell de berserk
+// del que se portó. Se retiran sus firmas: la barra superior centrada con
+// subrayado deslizante, el slab CTA elevado con glow ámbar, el indicador por
+// 1/4 del móvil y el gesto de swipe entre secciones.
+//
+// En su lugar:
+//   - desktop (≥sm): RAIL VERTICAL a la izquierda (patrón Lightroom/gestor de
+//     medios) — marca arriba, filas ancho completo, la fila activa marcada
+//     con filo ámbar + relleno bg-slab + texto ámbar (NO subrayado).
+//   - móvil (<sm): barra inferior plana de 4 items iguales; el activo lleva
+//     un lozenge ámbar detrás del icono (NO slab elevado, NO barra deslizante).
+//   - subidas en curso: badge ámbar discreto en el item Subir (n/total en el
+//     rail, punto en la barra inferior) — reemplaza al glow del slab.
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 
 import ActiveJobBand from '@/components/shell/ActiveJobBand.vue'
 import RgIcon from '@/lib/RgIcon.vue'
 import type { IconName } from '@/lib/icons'
 import { useUploadsStore } from '@/stores/uploads'
 
-// 4 secciones; "Subir" ocupa el slab CTA elevado (patrón workout-slab de
-// berserk): es LA acción que se hace con una mano desde el sofá, merece el
-// target grande — y con subidas en curso muestra n/total con glow ámbar.
+// 4 secciones, TODAS iguales (Subir ya no es un CTA elevado): el rail de
+// desktop y la barra inferior de móvil comparten este mismo array.
 const items: { name: string; label: string; icon: IconName }[] = [
   { name: 'organize', label: 'shell.nav.organize', icon: 'folder-open' },
   { name: 'upload', label: 'shell.nav.upload', icon: 'upload' },
@@ -22,309 +32,155 @@ const items: { name: string; label: string; icon: IconName }[] = [
 ]
 
 const route = useRoute()
-const router = useRouter()
 const uploads = useUploadsStore()
-// el locale vivo entra en la remedida del indicador: las etiquetas del nav
-// cambian de ancho al cambiar de idioma (ver el watcher del indicador)
+// locale vivo solo para el hint sutil del pie del rail (ES/EN)
 const { locale } = useI18n()
 
-// <main> es el ÚNICO contenedor de scroll de la app y las vistas fluyen.
-// El reset de scroll al cambiar de sección no llega gratis — se hace aquí,
-// explícito, sobre el PATH. Asignación directa a scrollTop (no scrollTo()):
-// mismo efecto y los entornos de test (happy-dom) la soportan sin mock.
+// <main> es el ÚNICO scroller de la app y las vistas fluyen. El reset de
+// scroll al cambiar de sección se hace aquí, explícito, sobre el PATH.
+// Asignación directa a scrollTop (no scrollTo()): mismo efecto y happy-dom la
+// soporta sin mock.
 const mainEl = ref<HTMLElement | null>(null)
 watch(() => route.path, () => {
   if (mainEl.value) mainEl.value.scrollTop = 0
 })
-
-// el item del CTA no es un RouterLink (una losa <div> con botón dentro,
-// herencia del patrón berserk que permitió anidar controles): navega por
-// router.push
-function goUpload() {
-  if (route.name !== 'upload') router.push({ name: 'upload' })
-}
-
-// jerarquía del glow del CTA: ruta /upload activa (opacity 1) > subidas en
-// curso desde otra ruta (tenue) > apagado
-const uploadGlowOpacity = computed(() => {
-  if (route.name === 'upload') return 1
-  return uploads.active ? 0.5 : 0
-})
-
-// swipe horizontal sobre <main> navega al item anterior/siguiente del nav
-// (sin dar la vuelta en los extremos). Guardas para no secuestrar gestos
-// legítimos: (1) el arrastre debe ser claramente horizontal (≥60px y el
-// doble que su componente vertical); (2) se ignora si empieza sobre un
-// scroller horizontal (tiras con overflow) — se detecta subiendo por el DOM
-// hasta <main>; (3) se ignora sobre inputs y sobre [data-no-swipe] (la grid
-// del input lo usará para el arrastre de selección). Listeners passive:
-// nunca bloquean el scroll.
-let swipeStartX = 0
-let swipeStartY = 0
-let swipeEligible = false
-
-function hasHorizontalScroller(start: Element | null): boolean {
-  let el: Element | null = start
-  while (el && el !== mainEl.value) {
-    if (el.scrollWidth > el.clientWidth + 4) {
-      const overflowX = getComputedStyle(el).overflowX
-      if (overflowX === 'auto' || overflowX === 'scroll') return true
-    }
-    el = el.parentElement
-  }
-  return false
-}
-
-function onMainTouchStart(event: TouchEvent) {
-  const touch = event.touches[0]
-  if (!touch) return
-  swipeStartX = touch.clientX
-  swipeStartY = touch.clientY
-  const target = event.target as Element | null
-  swipeEligible =
-    !target?.closest('canvas, input, textarea, [data-no-swipe]') &&
-    !hasHorizontalScroller(target)
-}
-
-function onMainTouchEnd(event: TouchEvent) {
-  if (!swipeEligible) return
-  const touch = event.changedTouches[0]
-  if (!touch) return
-  const dx = touch.clientX - swipeStartX
-  const dy = touch.clientY - swipeStartY
-  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 2) return
-  const target = items[activeIndex.value + (dx < 0 ? 1 : -1)]
-  if (target) router.push({ name: target.name })
-}
-
-// índice de la sección activa, para el indicador deslizante del bottom bar
-// (móvil): -1 (sin match) cae a 0 en vez de esconder la barra en una
-// posición rara — dentro de este shell siempre hay una ruta hija activa
-const activeIndex = computed(() => {
-  const idx = items.findIndex((item) => item.name === route.name)
-  return idx === -1 ? 0 : idx
-})
-
-// indicador deslizante también arriba (desktop) — pero ahí los items son de
-// ancho VARIABLE (etiquetas de texto), no columnas iguales, así que en vez
-// de fracciones fijas se mide el rectángulo real del item activo
-// (offsetLeft/offsetWidth) y el indicador se posiciona con transform+width
-// en píxeles. El <header> es el contexto de posicionamiento
-// (position:relative) para que translateX() sea relativo al header entero y
-// el indicador pueda vivir bottom-0 DEL HEADER, sobre su border-b.
-const desktopItemRefs = ref<(HTMLLIElement | null)[]>([])
-function setDesktopItemRef(el: Element | null, index: number) {
-  desktopItemRefs.value[index] = el as HTMLLIElement | null
-}
-
-const indicatorLeft = ref(0)
-const indicatorWidth = ref(0)
-
-function updateIndicator() {
-  const el = desktopItemRefs.value[activeIndex.value]
-  if (!el) return
-  indicatorLeft.value = el.offsetLeft
-  indicatorWidth.value = el.offsetWidth
-}
-
-onMounted(() => {
-  updateIndicator()
-  window.addEventListener('resize', updateIndicator)
-})
-onUnmounted(() => {
-  window.removeEventListener('resize', updateIndicator)
-})
-// remedir cuando cambia CUÁL item está activo y también al cambiar de idioma:
-// las etiquetas de texto (ancho variable en desktop) se re-miden, si no el
-// subrayado queda desalineado sobre el ancho del idioma anterior
-watch([activeIndex, locale], () => nextTick(updateIndicator))
-
-// h-dvh (no min-h-dvh) en la raíz del template: un tope real de altura es lo
-// que permite que <main> reparta con flex-1 un alto DEFINIDO — sin él, una
-// vista que pida "ocupa el resto del viewport" no tiene contra qué medirse y
-// la página entera crece en vez de scrollear por dentro. (Nota: este
-// comentario vive en <script>, no como primer hijo de <template> — un
-// comentario HTML ahí convierte la raíz en un fragmento de dos nodos y rompe
-// wrapper.classes()/fallthrough de un solo elemento raíz.)
 </script>
 
 <template>
-  <div class="h-dvh flex flex-col">
-    <!-- Desktop navbar: barra superior centrada. relative: contexto de
-         posicionamiento del indicador deslizante — translateX() queda
-         relativo al header entero y el indicador vive bottom-0 DE AQUÍ,
-         sobre la misma línea que border-b. -->
-    <header class="hidden sm:block border-b border-line relative">
-      <nav :aria-label="$t('shell.nav.label')">
-        <!-- items-end: sin esto, align-items:stretch estira cada <li> al
-             alto del más alto (la CTA, por su losa) pero el contenido de los
-             DEMÁS items se queda arriba, dejando hueco vacío antes del
-             border-b — los items "flotan" a media barra. items-end alinea
-             cada <li> por su propio borde inferior; la CTA sobresale por
-             debajo vía su propio -mb-5, fuera de su caja de layout. -->
-        <ul class="flex items-end justify-center gap-2">
-          <li
-            v-for="(item, index) in items"
-            :key="item.name"
-            :ref="(el) => setDesktopItemRef(el as Element | null, index)"
-          >
-            <div
-              v-if="item.name === 'upload'"
-              class="flex flex-col items-center gap-1 px-3 py-2"
-              :class="route.name === 'upload' ? 'text-amber' : 'text-ink-faint hover:text-ink'"
-            >
-              <span class="text-xs tracking-wide">{{ $t(item.label) }}</span>
-              <div class="rg-slab relative -mb-5 h-12 flex items-stretch border-amber text-amber" data-testid="cta-slab">
-                <!-- una sola capa de glow, apagada por defecto, que funde a
-                     opacity según la jerarquía (ver script) -->
-                <span
-                  class="absolute inset-0 rounded-sm shadow-(--rg-shadow-amber)"
-                  :style="{ opacity: uploadGlowOpacity, transition: 'opacity var(--rg-dur-3) var(--rg-ease-out)' }"
-                  aria-hidden="true"
-                  data-testid="upload-glow"
-                />
-                <button
-                  type="button"
-                  class="rg-press relative px-2.5 flex items-center justify-center"
-                  :aria-label="$t(item.label)"
-                  @click="goUpload"
-                >
-                  <!-- con subidas activas, el hueco del icono muestra el
-                       contador n/total (el estado del lote sigue visible
-                       desde cualquier sección) -->
-                  <span v-if="uploads.active" class="rg-metric text-sm whitespace-nowrap" data-testid="cta-uploads">
-                    {{ $t('shell.uploadsActive', { done: uploads.done, total: uploads.total }) }}
-                  </span>
-                  <RgIcon v-else :name="item.icon" :size="26" />
-                </button>
-              </div>
-            </div>
-            <RouterLink
-              v-else
-              :to="{ name: item.name }"
-              class="flex flex-col items-center gap-1 px-3 py-2 text-ink-faint hover:text-ink"
-              active-class="text-amber"
-            >
-              <span class="text-xs tracking-wide">{{ $t(item.label) }}</span>
-              <span><RgIcon :name="item.icon" :size="20" class="relative" /></span>
-            </RouterLink>
-          </li>
-        </ul>
+  <div class="h-dvh flex">
+    <!-- RAIL VERTICAL (desktop): dos columnas — rail fijo + columna de
+         contenido. hidden en móvil; ahí manda la barra inferior. -->
+    <aside class="hidden sm:flex sm:flex-col w-56 shrink-0 border-r border-line bg-stone">
+      <!-- marca: apertura de cámara ámbar + wordmark en la tipografía display
+           (identidad fototeca/cuarto oscuro, no chat/workout) -->
+      <div class="flex items-center gap-2.5 px-4 h-14 border-b border-line">
+        <svg
+          class="text-amber shrink-0"
+          viewBox="0 0 24 24"
+          width="22"
+          height="22"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" />
+          <path d="M14.31 8L20.05 17.94" />
+          <path d="M9.69 8L21.17 8" />
+          <path d="M7.38 12L13.12 2.06" />
+          <path d="M9.69 16L3.95 6.06" />
+          <path d="M14.31 16L2.83 16" />
+          <path d="M16.62 12L10.88 21.94" />
+        </svg>
+        <span class="font-display text-lg font-semibold tracking-tight text-ink">
+          {{ $t('shell.appName') }}
+        </span>
+      </div>
+      <!-- filas de navegación: fila ancho completo (icono + etiqueta), target
+           generoso. active-state por comparación de route.name (RouterLink ya
+           pone aria-current="page" en el enlace activo). -->
+      <nav
+        class="flex-1 flex flex-col gap-1 p-2"
+        :aria-label="$t('shell.nav.label')"
+        data-testid="rail-nav"
+      >
+        <RouterLink
+          v-for="item in items"
+          :key="item.name"
+          :to="{ name: item.name }"
+          class="relative flex items-center gap-3 rounded-sm pl-4 pr-3 py-2.5 text-sm transition-colors"
+          :class="route.name === item.name
+            ? 'bg-slab text-amber font-medium'
+            : 'text-ink-muted hover:bg-slab hover:text-ink'"
+        >
+          <!-- filo ámbar de la fila activa: marca vertical en el borde, NO un
+               subrayado deslizante (firma berserk retirada) -->
+          <span
+            v-if="route.name === item.name"
+            class="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-amber"
+            aria-hidden="true"
+          />
+          <RgIcon :name="item.icon" :size="20" />
+          <span>{{ $t(item.label) }}</span>
+          <!-- badge de subidas en curso (reemplaza al slab CTA con glow):
+               n/total del lote, visible desde cualquier sección -->
+          <span
+            v-if="item.name === 'upload' && uploads.active"
+            class="ml-auto rg-metric text-2xs px-1.5 py-0.5 rounded-full bg-amber/15 text-amber"
+            data-testid="upload-badge-rail"
+          >{{ $t('shell.uploadsActive', { done: uploads.done, total: uploads.total }) }}</span>
+        </RouterLink>
       </nav>
-      <!-- indicador deslizante único (no uno por item) — SIEMPRE montado,
-           cruza a opacity 0 en vez de desmontarse cuando la sección activa
-           es la CTA; medido en px porque los items no son columnas iguales -->
-      <div
-        class="absolute bottom-0 left-0 h-0.5 rounded-full bg-amber"
-        :style="{
-          transform: `translateX(${indicatorLeft}px)`,
-          width: `${indicatorWidth}px`,
-          opacity: route.name === 'upload' ? 0 : 1,
-          transition:
-            'transform var(--rg-dur-3) var(--rg-ease-out), width var(--rg-dur-3) var(--rg-ease-out), opacity var(--rg-dur-3) var(--rg-ease-out)',
-        }"
-        aria-hidden="true"
-        data-testid="nav-indicator-desktop"
-      />
-    </header>
-    <!-- banda de job activo: visible en toda la app mientras corre un job,
-         navega a /organize (ver ActiveJobBand.vue) -->
-    <ActiveJobBand />
-    <!-- Mobile bottom nav: barra inferior fija en móvil; oculta en desktop -->
+      <!-- pie sutil del rail: hint de locale (ES/EN). No duplica la versión de
+           la app (vive en Ajustes) — solo un indicador silencioso de estado. -->
+      <div class="px-4 py-3 border-t border-line text-2xs uppercase tracking-wider text-ink-faint">
+        {{ locale }}
+      </div>
+    </aside>
+
+    <!-- columna de contenido: banda de job activo (arriba, visible en toda la
+         app) + el único scroller <main>. min-w-0 para que el rail no se
+         comprima cuando una vista trae contenido ancho. -->
+    <div class="flex-1 min-w-0 flex flex-col">
+      <!-- banda de job activo: al inicio de la columna de contenido; navega a
+           /organize al tocarla (ver ActiveJobBand.vue) -->
+      <ActiveJobBand />
+      <!-- EL MODELO DE SCROLL (estable, heredado): <main> es el ÚNICO scroller
+           de la app, a ancho completo (la columna centrada vive en el wrapper
+           de abajo). Las vistas FLUYEN (altura por contenido) y su chrome se
+           pega con sticky top-0 contra este scrollport. -->
+      <main
+        ref="mainEl"
+        class="flex-1 min-h-0 overflow-y-auto rg-scroll-stable w-full"
+      >
+        <!-- wrapper de FLUJO puro — columna centrada, altura por contenido.
+             pb-24 reserva el hueco de la barra inferior fija en móvil; en
+             desktop (sin barra inferior) basta un respiro menor. -->
+        <div class="max-w-3xl mx-auto w-full px-4 pt-4 pb-24 sm:pb-10">
+          <RouterView />
+        </div>
+      </main>
+    </div>
+
+    <!-- BARRA INFERIOR (móvil): 4 items iguales, plana. Oculta en desktop. -->
     <nav
       class="fixed inset-x-0 bottom-0 z-(--rg-z-nav) border-t border-line bg-stone pb-[env(safe-area-inset-bottom)] sm:hidden"
       :aria-label="$t('shell.nav.label')"
+      data-testid="bottom-nav"
     >
-      <div class="relative max-w-3xl mx-auto">
-        <!-- indicador deslizante: una barra por cada 1/4 del ancho, se
-             traslada al índice activo — SIEMPRE montado (nunca v-if) para
-             poder cruzar a opacity 0 en vez de desaparecer de golpe al
-             entrar en /upload; ya se traslada solo hasta la posición de la
-             CTA (activeIndex la incluye), así que el fade queda encima de
-             ese movimiento, no en lugar de él -->
-        <div
-          class="absolute top-0 left-0 h-0.5 w-1/4 rounded-full bg-amber"
-          :style="{
-            transform: `translateX(${activeIndex * 100}%)`,
-            opacity: route.name === 'upload' ? 0 : 1,
-            transition: 'transform var(--rg-dur-3) var(--rg-ease-out), opacity var(--rg-dur-3) var(--rg-ease-out)',
-          }"
-          aria-hidden="true"
-          data-testid="nav-indicator"
-        />
-        <ul class="flex justify-around">
-          <!-- flex-1 SIEMPRE: las 4 columnas del bottom nav miden 1/4 cada
-               una — el indicador deslizante depende de esa aritmética -->
-          <li v-for="item in items" :key="item.name" class="flex-1">
-            <div
-              v-if="item.name === 'upload'"
-              class="flex flex-col items-center gap-1 py-2"
-              :class="route.name === 'upload' ? 'text-amber' : 'text-ink-faint'"
+      <ul class="flex">
+        <li v-for="item in items" :key="item.name" class="flex-1">
+          <RouterLink
+            :to="{ name: item.name }"
+            class="flex flex-col items-center gap-1 pt-2 pb-1.5"
+          >
+            <!-- lozenge ámbar detrás del icono activo (reemplaza el slab
+                 elevado y la barra deslizante): plano, sin glow. Todos los
+                 items iguales, Subir incluido. -->
+            <span
+              class="relative flex h-8 w-12 items-center justify-center rounded-full transition-colors"
+              :class="route.name === item.name ? 'bg-amber/15 text-amber' : 'text-ink-faint'"
+              data-testid="bottom-nav-pill"
             >
-              <div class="rg-slab relative -mt-5 h-12 flex items-stretch border-amber text-amber" data-testid="cta-slab-mobile">
-                <span
-                  class="absolute inset-0 rounded-sm shadow-(--rg-shadow-amber)"
-                  :style="{ opacity: uploadGlowOpacity, transition: 'opacity var(--rg-dur-3) var(--rg-ease-out)' }"
-                  aria-hidden="true"
-                  data-testid="upload-glow"
-                />
-                <button
-                  type="button"
-                  class="rg-press relative px-2.5 flex items-center justify-center"
-                  :aria-label="$t(item.label)"
-                  @click="goUpload"
-                >
-                  <span v-if="uploads.active" class="rg-metric text-sm whitespace-nowrap" data-testid="cta-uploads-mobile">
-                    {{ $t('shell.uploadsActive', { done: uploads.done, total: uploads.total }) }}
-                  </span>
-                  <RgIcon v-else :name="item.icon" :size="26" />
-                </button>
-              </div>
-              <span class="text-2xs tracking-wide">{{ $t(item.label) }}</span>
-            </div>
-            <RouterLink
-              v-else
-              :to="{ name: item.name }"
-              class="flex flex-col items-center gap-1 py-2 text-ink-faint"
-              active-class="text-amber"
-            >
-              <span><RgIcon :name="item.icon" :size="20" class="relative" /></span>
-              <span class="text-2xs tracking-wide">{{ $t(item.label) }}</span>
-            </RouterLink>
-          </li>
-        </ul>
-      </div>
+              <RgIcon :name="item.icon" :size="20" />
+              <!-- punto ámbar de subidas en curso: visible desde cualquier
+                   sección (equivalente móvil del badge n/total del rail) -->
+              <span
+                v-if="item.name === 'upload' && uploads.active"
+                class="absolute top-0.5 right-2.5 h-2 w-2 rounded-full bg-amber ring-2 ring-stone"
+                data-testid="upload-badge-mobile"
+                aria-hidden="true"
+              />
+            </span>
+            <span
+              class="text-2xs tracking-wide"
+              :class="route.name === item.name ? 'text-amber' : 'text-ink-faint'"
+            >{{ $t(item.label) }}</span>
+          </RouterLink>
+        </li>
+      </ul>
     </nav>
-    <!-- EL MODELO DE SCROLL (tercera iteración de berserk, importada ya
-         estable): <main> es el ÚNICO scroller de la app, A ANCHO COMPLETO
-         (la columna centrada vive en el wrapper de abajo) — su scrollbar
-         pinta en el borde real de la ventana en desktop. Las vistas FLUYEN
-         (altura por contenido, sin acotarse) y su chrome se pega arriba con
-         sticky top-0 contra este scrollport — sticky exige que ningún
-         ancestro intermedio tenga overflow propio ni transform retenido
-         (las entradas rg-stagger usan fill backwards: el transform se
-         limpia al terminar). El scroll interno sobrevive SOLO en cajas hoja
-         con su propia altura (paneles de RgSelect, sheets) — nunca como
-         cadena de referencias de altura entre niveles. -->
-    <main
-      ref="mainEl"
-      class="flex-1 min-h-0 overflow-y-auto rg-scroll-stable w-full"
-      @touchstart.passive="onMainTouchStart"
-      @touchend.passive="onMainTouchEnd"
-    >
-      <!-- wrapper de FLUJO puro — columna centrada, altura por contenido,
-           sin calc ni flex-col ni spacer. pb-24 como padding es CORRECTO
-           aquí: con altura auto la caja TERMINA donde termina el contenido y
-           el padding queda siempre después de él, reservando el hueco del
-           navbar móvil fijo. -->
-      <div class="max-w-3xl mx-auto w-full px-4 pt-4 pb-24">
-        <!-- sin Transition aquí a propósito: envolver la vista ENTERA en un
-             fade MIENTRAS su propio rg-stagger interno corre con su delay
-             son dos sistemas de animación a la vez (las opacidades se
-             multiplican y el viewport se ve negro unos ms tras navegar).
-             Cada vista es dueña de su única animación de entrada. -->
-        <RouterView />
-      </div>
-    </main>
   </div>
 </template>

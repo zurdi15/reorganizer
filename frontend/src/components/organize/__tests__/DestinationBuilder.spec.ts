@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -44,6 +44,8 @@ describe('DestinationBuilder', () => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
   })
+
+  // ---- composición de segmentos (equivalentes al builder previo) ----
 
   it('Enter commits the typed segment as a chip and clears the field', async () => {
     const { wrapper, organize } = mountBuilder()
@@ -102,6 +104,19 @@ describe('DestinationBuilder', () => {
     expect(wrapper.find('[data-testid="dest-up"]').exists()).toBe(false)
   })
 
+  // ---- breadcrumb "estás aquí" ----
+
+  it('always shows the /output root in the breadcrumb, even with no segments', () => {
+    const { wrapper } = mountBuilder()
+    const root = wrapper.get('[data-testid="dest-root"]')
+    expect(root.text()).toContain('/output')
+    // sin segmentos confirmados no hay chips ni `..`
+    expect(wrapper.findAll('[data-testid="dest-chip"]')).toHaveLength(0)
+    expect(wrapper.find('[data-testid="dest-up"]').exists()).toBe(false)
+  })
+
+  // ---- carga del árbol de salida ----
+
   it('debounces the dirs fetch (300ms) and collapses a burst of path changes into one request', async () => {
     vi.useFakeTimers()
     const { organize } = mountBuilder()
@@ -123,25 +138,50 @@ describe('DestinationBuilder', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/output/dirs?path=2024', expect.anything())
   })
 
-  it('the panel filters fetched dirs while typing and a tap commits the suggestion', async () => {
+  it('renders the fetched folder list, visible without focusing the input', async () => {
     vi.useFakeTimers()
-    const { wrapper, organize } = mountBuilder()
+    const { wrapper } = mountBuilder()
     await vi.advanceTimersByTimeAsync(300)
     await nextTick()
 
-    const input = wrapper.get('input')
-    await input.trigger('focusin')
-    await input.setValue('20')
+    // el árbol se ve SIN tocar el input (no está tras el foco)
+    expect(wrapper.find('[data-testid="dest-tree"]').exists()).toBe(true)
+    const folders = wrapper.findAll('[data-testid="dest-folder"]')
+    expect(folders).toHaveLength(3)
+    expect(folders.map((f) => f.text())).toEqual(['2024', '2025', 'viajes'])
+    // has_children pinta la afordancia de "entra"; una hoja no
+    expect(folders[0].find('[data-testid="dest-folder-more"]').exists()).toBe(true)
+    expect(folders[1].find('[data-testid="dest-folder-more"]').exists()).toBe(false)
+  })
+
+  it('tapping a folder descends into it and reloads the list for the new level', async () => {
+    vi.useFakeTimers()
+    const { wrapper, organize } = mountBuilder()
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    await vi.advanceTimersByTimeAsync(300)
     await nextTick()
 
-    const suggestions = wrapper.findAll('[data-testid="dest-suggestion"]')
-    expect(suggestions).toHaveLength(2)
-    expect(suggestions.map((s) => s.text().replace(/\s*\/$/, ''))).toEqual(['2024', '2025'])
-    // has_children pinta el sufijo '/'
-    expect(suggestions[0].text()).toContain('/')
-
-    await suggestions[0].trigger('click')
+    await wrapper.findAll('[data-testid="dest-folder"]')[0].trigger('click')
     expect(organize.destSegments).toEqual(['2024'])
-    expect((input.element as HTMLInputElement).value).toBe('')
+
+    // descender recarga la lista al nivel nuevo
+    await vi.advanceTimersByTimeAsync(300)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/output/dirs?path=2024', expect.anything())
+  })
+
+  it('removing a breadcrumb chip reloads the parent level', async () => {
+    vi.useFakeTimers()
+    const { wrapper, organize } = mountBuilder()
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    organize.setFromPath('2024/08')
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(300)
+    fetchMock.mockClear()
+
+    // `..` sube un nivel: la lista recarga la ruta padre
+    await wrapper.get('[data-testid="dest-up"]').trigger('click')
+    expect(organize.destSegments).toEqual(['2024'])
+    await vi.advanceTimersByTimeAsync(300)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/output/dirs?path=2024', expect.anything())
   })
 })

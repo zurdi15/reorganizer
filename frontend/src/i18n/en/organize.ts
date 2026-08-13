@@ -39,6 +39,16 @@ export const organize = {
     suggestionsExif: 'EXIF',
     suggestionsRecent: 'Recent',
   },
+  tree: {
+    root: '/output',
+    loading: 'Loading folders…',
+    empty: 'No subfolders here.',
+    noMatches: 'No folder matches.',
+    newFolder: 'New folder…',
+    newFolderHint: 'Enter creates the folder; / chains levels.',
+    willCreate: 'will be created',
+    open: 'Open {name}',
+  },
   previewCta: 'Preview',
   plan: {
     title: 'Plan',

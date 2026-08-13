@@ -1,4 +1,5 @@
 export const shell = {
+  appName: 'Reorganizer',
   nav: {
     organize: 'Organize',
     upload: 'Upload',

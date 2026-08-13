@@ -47,6 +47,17 @@ export const organize = {
     suggestionsExif: 'EXIF',
     suggestionsRecent: 'Recientes',
   },
+  // navegador del árbol de salida: lista visible de subcarpetas + creación
+  tree: {
+    root: '/output',
+    loading: 'Cargando carpetas…',
+    empty: 'Sin subcarpetas aquí.',
+    noMatches: 'Ninguna carpeta coincide.',
+    newFolder: 'Nueva carpeta…',
+    newFolderHint: 'Enter crea la carpeta; / encadena niveles.',
+    willCreate: 'se creará',
+    open: 'Abrir {name}',
+  },
   previewCta: 'Previsualizar',
   // etapa plan: dry-run + preview agrupada
   plan: {

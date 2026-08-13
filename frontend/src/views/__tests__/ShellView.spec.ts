@@ -46,30 +46,59 @@ describe('ShellView', () => {
     await router.isReady()
   })
 
-  it('redirects / to /organize and renders the 4-section bottom nav with the upload CTA slab', async () => {
+  it('redirects / to /organize and renders both the desktop rail and the mobile bottom nav with 4 items each', async () => {
     const wrapper = await mountApp()
     expect(router.currentRoute.value.name).toBe('organize')
 
-    const mobileNav = wrapper.findAll('nav').at(-1)!
-    expect(mobileNav.findAll('li')).toHaveLength(4)
-    expect(wrapper.find('[data-testid="cta-slab-mobile"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="cta-slab"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="nav-indicator"]').exists()).toBe(true)
+    const rail = wrapper.get('[data-testid="rail-nav"]')
+    const bottom = wrapper.get('[data-testid="bottom-nav"]')
+    expect(rail.findAll('a')).toHaveLength(4)
+    expect(bottom.findAll('a')).toHaveLength(4)
+
+    // firmas de berserk retiradas: sin slab CTA, sin glow, sin indicadores
+    expect(wrapper.find('[data-testid="cta-slab"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="cta-slab-mobile"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upload-glow"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="nav-indicator"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="nav-indicator-desktop"]').exists()).toBe(false)
   })
 
-  it('slides the mobile indicator by whole columns when the section changes', async () => {
+  it('marks the active rail row with aria-current + amber active class, and moves it when the section changes', async () => {
     const wrapper = await mountApp()
-    const indicator = wrapper.get('[data-testid="nav-indicator"]')
-    expect(indicator.attributes('style')).toContain('translateX(0%)')
+    const rail = wrapper.get('[data-testid="rail-nav"]')
+
+    // en /organize el enlace activo es el primero (índice 0)
+    const activeOrganize = rail.get('a[aria-current="page"]')
+    expect(activeOrganize.text()).toContain('Organizar')
+    expect(activeOrganize.classes()).toContain('text-amber')
+    expect(rail.findAll('a[aria-current="page"]')).toHaveLength(1)
 
     await router.push({ name: 'settings' })
     await nextTick()
-    expect(indicator.attributes('style')).toContain('translateX(300%)')
+    const activeSettings = rail.get('a[aria-current="page"]')
+    expect(activeSettings.text()).toContain('Ajustes')
+    expect(rail.findAll('a[aria-current="page"]')).toHaveLength(1)
   })
 
-  it('shows n/total in the CTA slab while uploads are active (uploads store contract)', async () => {
+  it('puts the amber pill behind the active icon in the mobile bottom nav on the current route', async () => {
     const wrapper = await mountApp()
-    expect(wrapper.find('[data-testid="cta-uploads-mobile"]').exists()).toBe(false)
+    const bottom = wrapper.get('[data-testid="bottom-nav"]')
+
+    const activeLink = bottom.get('a[aria-current="page"]')
+    expect(activeLink.text()).toContain('Organizar')
+    expect(activeLink.get('[data-testid="bottom-nav-pill"]').classes()).toContain('bg-amber/15')
+
+    await router.push({ name: 'history' })
+    await nextTick()
+    const nowActive = bottom.get('a[aria-current="page"]')
+    expect(nowActive.text()).toContain('Historial')
+    expect(nowActive.get('[data-testid="bottom-nav-pill"]').classes()).toContain('bg-amber/15')
+  })
+
+  it('shows the uploads badge on the Upload item (rail n/total + mobile dot) while uploads are active (uploads store contract)', async () => {
+    const wrapper = await mountApp()
+    expect(wrapper.find('[data-testid="upload-badge-rail"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upload-badge-mobile"]').exists()).toBe(false)
 
     const uploads = useUploadsStore()
     uploads.active = true
@@ -77,9 +106,8 @@ describe('ShellView', () => {
     uploads.total = 12
     await nextTick()
 
-    expect(wrapper.get('[data-testid="cta-uploads-mobile"]').text()).toBe('3/12')
-    const glow = wrapper.findAll('[data-testid="upload-glow"]').at(-1)!
-    expect(glow.attributes('style')).toContain('opacity: 0.5')
+    expect(wrapper.get('[data-testid="upload-badge-rail"]').text()).toBe('3/12')
+    expect(wrapper.find('[data-testid="upload-badge-mobile"]').exists()).toBe(true)
   })
 
   it('shows the active-job band while a job runs and taps through to /organize (jobs store contract)', async () => {

@@ -1,5 +1,7 @@
-// Shell: navegación, slab CTA de subida y banda de job activo.
+// Shell: navegación (rail + barra inferior), badge de subidas y banda de job.
 export const shell = {
+  // wordmark del rail: nombre de la app (marca, igual en ambos idiomas)
+  appName: 'Reorganizer',
   nav: {
     organize: 'Organizar',
     upload: 'Subir',
@@ -7,7 +9,7 @@ export const shell = {
     settings: 'Ajustes',
     label: 'Navegación principal',
   },
-  // contador del slab CTA mientras hay subidas en curso: "3/12"
+  // badge del item Subir mientras hay subidas en curso: "3/12"
   uploadsActive: '{done}/{total}',
   // banda persistente bajo el nav mientras corre un job
   activeJob: 'Organizando · {done}/{total}',
