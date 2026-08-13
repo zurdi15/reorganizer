@@ -1,15 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Marca Reorganizer: cuadrado void redondeado + silueta de carpeta en
-       ámbar cuya abertura es un hexágono de diafragma de cámara (fill-rule
-       evenodd talla el hueco). Geometría simple a propósito: legible a 48px. -->
+  <!-- Marca Reorganizer: cuadrado void redondeado + carpeta ámbar sólida con
+       el MISMO diafragma de cámara que la marca de la sidebar (círculo + 6
+       palas), trazado en el color de fondo dentro del cuerpo de la carpeta.
+       Geometría simple a propósito: legible a 48px. -->
   <rect width="512" height="512" rx="96" fill="#0C0C0E"/>
-  <path fill="#F5A93F" fill-rule="evenodd" d="
+  <path fill="#F5A93F" d="
     M104 128
     h110 l40 44 h154 a28 28 0 0 1 28 28 v184 a28 28 0 0 1 -28 28
-    H104 a28 28 0 0 1 -28 -28 V156 a28 28 0 0 1 28 -28 z
-    M256 216 l69.3 40 v80 l-69.3 40 l-69.3 -40 v-80 z"/>
-  <!-- diafragma interior: hexágono rotado 30° dentro del hueco, como las
-       palas de una apertura a medio cerrar -->
-  <path fill="none" stroke="#F5A93F" stroke-width="14" d="
-    M304 296 l-24 41.6 h-48 l-24 -41.6 l24 -41.6 h48 z"/>
+    H104 a28 28 0 0 1 -28 -28 V156 a28 28 0 0 1 28 -28 z"/>
+  <!-- diafragma idéntico al de la sidebar (viewBox 24), centrado en (256,300)
+       con scale 8: 12*8=96 → translate(160,204) coloca el centro del iris en
+       el cuerpo de la carpeta; trazo en color void -->
+  <g transform="translate(160 204) scale(8)" fill="none" stroke="#0C0C0E"
+     stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/>
+    <path d="M14.31 8L20.05 17.94"/>
+    <path d="M9.69 8L21.17 8"/>
+    <path d="M7.38 12L13.12 2.06"/>
+    <path d="M9.69 16L3.95 6.06"/>
+    <path d="M14.31 16L2.83 16"/>
+    <path d="M16.62 12L10.88 21.94"/>
+  </g>
 </svg>
