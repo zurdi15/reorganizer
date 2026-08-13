@@ -18,16 +18,20 @@ const organize = useOrganizeStore()
 
 <template>
   <div class="flex flex-col gap-3">
-    <!-- breadcrumb "estás aquí": raíz /output + segmentos confirmados como
-         chips mono eliminables + `..` (subir un nivel). Targets ≥40px. -->
+    <!-- breadcrumb "estás aquí": raíz (icono, vuelve arriba) + segmentos
+         confirmados como chips mono eliminables + `..`. Sin el `/output`
+         literal: solo importa la ruta bajo output. Targets ≥40px. -->
     <div class="flex flex-wrap items-center gap-1.5" data-testid="dest-chips">
-      <span
-        class="rg-metric inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-line bg-void px-2.5 text-sm text-ink-faint"
+      <button
+        type="button"
+        class="rg-press inline-flex min-h-10 items-center rounded-sm border border-line bg-void px-2.5 text-ink-faint hover:border-line-strong hover:text-ink"
+        :aria-label="t('organize.tree.root')"
+        :title="t('organize.tree.root')"
         data-testid="dest-root"
+        @click="organize.setFromPath('')"
       >
-        <RgIcon name="folder-open" :size="14" />
-        {{ t('organize.tree.root') }}
-      </span>
+        <RgIcon name="folder-open" :size="16" />
+      </button>
       <template v-for="(segment, i) in organize.destSegments" :key="`${i}-${segment}`">
         <span class="text-ink-faint" aria-hidden="true">/</span>
         <button
@@ -56,9 +60,10 @@ const organize = useOrganizeStore()
     <!-- navegador del árbol real de /output + creación de carpeta nueva -->
     <OutputTreeBrowser />
 
-    <!-- preview de la ruta completa compuesta -->
+    <!-- preview de la ruta compuesta, RELATIVA a output (sin el prefijo
+         informativo) -->
     <p class="rg-metric break-all text-sm text-ink-muted" data-testid="dest-preview">
-      → /output/{{ organize.destPath ? `${organize.destPath}/` : '' }}…
+      → {{ organize.destPath ? `${organize.destPath}/` : '' }}…
     </p>
   </div>
 </template>

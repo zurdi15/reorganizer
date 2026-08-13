@@ -40,7 +40,7 @@ export const organize = {
     suggestionsRecent: 'Recent',
   },
   tree: {
-    root: '/output',
+    root: 'Back to top',
     loading: 'Loading folders…',
     empty: 'No subfolders here.',
     noMatches: 'No folder matches.',
@@ -65,7 +65,7 @@ export const organize = {
   },
   confirm: {
     title: 'Confirm',
-    summary: 'no files → /output/{path} | 1 file → /output/{path} | {n} files → /output/{path}',
+    summary: 'no files → {path} | 1 file → {path} | {n} files → {path}',
     mode: 'Mode',
     modeMove: 'Move',
     modeCopy: 'Copy',

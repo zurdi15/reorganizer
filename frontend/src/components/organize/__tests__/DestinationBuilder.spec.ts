@@ -58,8 +58,10 @@ describe('DestinationBuilder', () => {
     expect(chips).toHaveLength(1)
     expect(chips[0].text()).toContain('croacia')
     expect((input.element as HTMLInputElement).value).toBe('')
-    // la preview de ruta completa refleja lo confirmado
-    expect(wrapper.get('[data-testid="dest-preview"]').text()).toContain('/output/croacia/')
+    // la preview refleja lo confirmado, RELATIVA a output (sin prefijo)
+    const preview = wrapper.get('[data-testid="dest-preview"]').text()
+    expect(preview).toContain('croacia/')
+    expect(preview).not.toContain('/output')
   })
 
   it('typing / commits the pending segment (chaining), and an unmatched value commits too', async () => {
@@ -106,10 +108,15 @@ describe('DestinationBuilder', () => {
 
   // ---- breadcrumb "estás aquí" ----
 
-  it('always shows the /output root in the breadcrumb, even with no segments', () => {
-    const { wrapper } = mountBuilder()
+  it('shows a root affordance (no /output literal) and jumps back to top on click', async () => {
+    const { wrapper, organize } = mountBuilder()
+    organize.setFromPath('2025/08')
+    await nextTick()
     const root = wrapper.get('[data-testid="dest-root"]')
-    expect(root.text()).toContain('/output')
+    // la raíz es un icono clicable, sin el texto informativo "/output"
+    expect(root.text()).not.toContain('/output')
+    await root.trigger('click')
+    expect(organize.destSegments).toEqual([])
     // sin segmentos confirmados no hay chips ni `..`
     expect(wrapper.findAll('[data-testid="dest-chip"]')).toHaveLength(0)
     expect(wrapper.find('[data-testid="dest-up"]').exists()).toBe(false)

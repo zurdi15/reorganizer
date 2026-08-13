@@ -49,7 +49,7 @@ export const organize = {
   },
   // navegador del árbol de salida: lista visible de subcarpetas + creación
   tree: {
-    root: '/output',
+    root: 'Volver a la raíz',
     loading: 'Cargando carpetas…',
     empty: 'Sin subcarpetas aquí.',
     noMatches: 'Ninguna carpeta coincide.',
@@ -76,7 +76,7 @@ export const organize = {
   // sheet de confirmación previa a ejecutar
   confirm: {
     title: 'Confirmar',
-    summary: 'sin archivos → /output/{path} | 1 archivo → /output/{path} | {n} archivos → /output/{path}',
+    summary: 'sin archivos → {path} | 1 archivo → {path} | {n} archivos → {path}',
     mode: 'Modo',
     modeMove: 'Mover',
     modeCopy: 'Copiar',

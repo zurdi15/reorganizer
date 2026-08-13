@@ -80,7 +80,8 @@ describe('RunConfirmSheet', () => {
   it('shows the summary and initializes the segments from the planned job echo', async () => {
     await mountSheet()
 
-    expect(q('confirm-summary')!.textContent).toContain('39 archivos → /output/2024/08/croacia')
+    expect(q('confirm-summary')!.textContent).toContain('39 archivos → 2024/08/croacia')
+    expect(q('confirm-summary')!.textContent).not.toContain('/output')
 
     const checked = [...document.querySelectorAll('[role="radio"][aria-checked="true"]')].map(
       (el) => el.textContent?.trim(),
