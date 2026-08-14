@@ -107,3 +107,21 @@ def test_thumb_cache_key_includes_mtime(media_dirs):
     make_photo(src, size=(600, 400))
     second = thumbs.get_or_create_thumb(src)
     assert first != second
+
+
+async def test_get_thumb_async_generates_and_caches(media_dirs):
+    # la ruta async (con semáforo) genera y luego sirve de cache; llamadas
+    # concurrentes a la misma foto no revientan (temp único por intento)
+    import asyncio
+
+    settings = get_settings()
+    src = settings.input_dir / "foto.jpg"
+    make_photo(src)
+    results = await asyncio.gather(*[thumbs.get_thumb(src) for _ in range(5)])
+    assert all(r == results[0] for r in results)
+    assert results[0].is_file()
+    # una sola miniatura en cache pese a las 5 llamadas
+    assert len(list(settings.thumbs_dir.glob("*.jpg"))) == 1
+    # segunda tanda: cache hit (no debe lanzar ni duplicar)
+    again = await thumbs.get_thumb(src)
+    assert again == results[0]

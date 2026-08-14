@@ -3,6 +3,7 @@ ffmpeg. Cache en data_dir/thumbs/<sha1(path+mtime)>.jpg — la clave incluye el
 mtime, así que reemplazar un archivo invalida su miniatura sola.
 """
 
+import asyncio
 import hashlib
 import os
 import subprocess
@@ -23,6 +24,13 @@ except ImportError:  # pragma: no cover
     pass
 
 THUMB_SIZE = 512
+
+# tope de miniaturas generándose A LA VEZ: la grid pide cientos de golpe y cada
+# generación decodifica una imagen (o lanza ffmpeg) en RAM — sin este freno el
+# pod se queda sin memoria (OOMKilled). Solo limita la GENERACIÓN; las
+# cacheadas se sirven sin pasar por aquí.
+THUMB_CONCURRENCY = 3
+_thumb_sem = asyncio.Semaphore(THUMB_CONCURRENCY)
 
 # clasificación BARATA por extensión (la real, por contenido, es del planning)
 PHOTO_EXTS = {
@@ -50,13 +58,33 @@ def kind_for(path: Path | str) -> str:
     return "unknown"
 
 
-def get_or_create_thumb(src: Path) -> Path:
-    """Devuelve la ruta de la miniatura JPEG 512px de `src`, generándola si no
-    está en cache."""
-    settings = get_settings()
+def _thumb_path(src: Path) -> Path:
     stat = src.stat()
     key = hashlib.sha1(f"{src}:{stat.st_mtime_ns}".encode()).hexdigest()
-    dest = settings.thumbs_dir / f"{key}.jpg"
+    return get_settings().thumbs_dir / f"{key}.jpg"
+
+
+async def get_thumb(src: Path) -> Path:
+    """Como get_or_create_thumb pero ACOTANDO la generación concurrente y
+    fuera del event loop. Las cacheadas se devuelven al instante sin ocupar un
+    permiso del semáforo; solo las que hay que generar lo hacen (máx N a la
+    vez), en un hilo — así ni se bloquea el loop ni se dispara la memoria."""
+    dest = _thumb_path(src)
+    if dest.is_file():
+        return dest
+    async with _thumb_sem:
+        # re-chequeo: otra request pudo generarla mientras esperábamos el turno
+        if dest.is_file():
+            return dest
+        return await asyncio.to_thread(get_or_create_thumb, src)
+
+
+def get_or_create_thumb(src: Path) -> Path:
+    """Devuelve la ruta de la miniatura JPEG 512px de `src`, generándola si no
+    está en cache. Trabajo síncrono (CPU/subprocess) — llamar vía get_thumb
+    para acotar la concurrencia y no bloquear el event loop."""
+    settings = get_settings()
+    dest = _thumb_path(src)
     if dest.is_file():
         return dest
     settings.thumbs_dir.mkdir(parents=True, exist_ok=True)
@@ -82,6 +110,11 @@ def get_or_create_thumb(src: Path) -> Path:
 def _photo_thumb(src: Path, out: Path) -> None:
     try:
         with Image.open(src) as img:
+            # draft: en JPEG hace que libjpeg DECODIFIQUE ya a escala reducida
+            # (1/2, 1/4, 1/8) en vez de a resolución completa — una foto de
+            # 12MP pasa de ~36MB en RAM a ~2MB. Clave para no reventar la
+            # memoria del pod al generar muchas miniaturas a la vez.
+            img.draft("RGB", (THUMB_SIZE, THUMB_SIZE))
             # respeta el tag EXIF Orientation (móviles guardan el sensor crudo)
             img = ImageOps.exif_transpose(img)
             img.thumbnail((THUMB_SIZE, THUMB_SIZE))

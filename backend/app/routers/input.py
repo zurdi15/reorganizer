@@ -151,14 +151,16 @@ async def probe(path: str = Query(...), db: Session = Depends(get_db)) -> InputP
 
 
 @router.get("/preview")
-def preview(path: str = Query(...), thumb: bool = Query(False)) -> FileResponse:
+async def preview(path: str = Query(...), thumb: bool = Query(False)) -> FileResponse:
     settings = get_settings()
     target = resolve_under(settings.input_dir, path)
     if not target.is_file():
         raise HTTPException(status_code=404, detail="file_not_found")
     if thumb:
         try:
-            cached = thumbs.get_or_create_thumb(target)
+            # get_thumb acota la concurrencia (semáforo) y corre la generación
+            # en un hilo: la grid puede pedir cientos sin reventar la memoria
+            cached = await thumbs.get_thumb(target)
         except thumbs.ThumbUnavailableError:
             raise HTTPException(status_code=404, detail="thumb_unavailable") from None
         return FileResponse(cached, media_type="image/jpeg")
