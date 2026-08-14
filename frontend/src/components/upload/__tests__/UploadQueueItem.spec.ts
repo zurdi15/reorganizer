@@ -89,13 +89,10 @@ describe('UploadQueueItem', () => {
     expect(wrapper.find('[data-testid="retry-btn"]').exists()).toBe(true)
   })
 
-  it('warns (without blocking) on files over 2 GB', () => {
-    const small = mountItem()
-    expect(small.find('[data-testid="too-big-badge"]').exists()).toBe(false)
-
+  it('shows a large file like any other — no size warning (chunking made it reliable)', () => {
     const big = mountItem({ kind: 'video', size: 3 * 1024 ** 3 })
-    expect(big.find('[data-testid="too-big-badge"]').exists()).toBe(true)
-    // sigue habiendo cancel normal: avisa, no bloquea
+    expect(big.find('[data-testid="too-big-badge"]').exists()).toBe(false)
+    // tamaño normal + cancel normal, sin aviso
     expect(big.find('[data-testid="cancel-btn"]').exists()).toBe(true)
   })
 

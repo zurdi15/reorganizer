@@ -8,8 +8,6 @@ export const upload = {
     addMore: 'Añadir más archivos',
   },
   queue: {
-    // aviso pre-vuelo (espejo del cap del backend): avisar, nunca bloquear
-    tooBig: '>2 GB — puede fallar en móvil',
     canceled: 'Cancelado',
   },
   summary: {

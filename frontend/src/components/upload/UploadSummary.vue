@@ -28,9 +28,10 @@ const line = computed(() => {
 // drenado con algo subido: estado de éxito (aunque haya errores al lado —
 // esos conservan su retry)
 const drained = computed(() => !uploads.active && uploads.stats.done > 0)
-const finishedCount = computed(
-  () => uploads.stats.done + uploads.stats.error + uploads.stats.canceled,
-)
+// "Limpiar terminados" SOLO cuenta lo que de verdad barre (completados +
+// cancelados). Los fallidos NO se limpian (se reintentan), así que el botón
+// ni aparece por ellos ni da a entender que los va a tocar.
+const finishedCount = computed(() => uploads.stats.done + uploads.stats.canceled)
 </script>
 
 <template>

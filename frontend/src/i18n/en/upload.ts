@@ -6,7 +6,6 @@ export const upload = {
     addMore: 'Add more files',
   },
   queue: {
-    tooBig: '>2 GB — may fail on mobile',
     canceled: 'Canceled',
   },
   summary: {

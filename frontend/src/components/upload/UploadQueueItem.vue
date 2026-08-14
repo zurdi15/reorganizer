@@ -7,7 +7,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import RgBadge from '@/lib/RgBadge.vue'
 import RgButton from '@/lib/RgButton.vue'
 import RgIcon from '@/lib/RgIcon.vue'
 import RgProgress from '@/lib/RgProgress.vue'
@@ -19,12 +18,9 @@ const emit = defineEmits<{ retry: [id: number]; cancel: [id: number] }>()
 
 const { t, te } = useI18n()
 
-// espejo del cap práctico del backend/iOS: AVISAR, nunca bloquear — el
-// usuario merece saber antes de esperar 20 minutos que un vídeo enorme
-// puede morir en móvil (riesgo iOS del plan)
-const PREFLIGHT_WARN_BYTES = 2 * 1024 ** 3
-
-const tooBig = computed(() => props.item.size > PREFLIGHT_WARN_BYTES)
+// (ya no hay aviso de "archivo grande": la subida por trozos reanudable hace
+// que los archivos de varios GB suban de forma fiable — el tamaño se muestra
+// como en cualquier archivo)
 const shownName = computed(() => middleTruncate(props.item.name, 34))
 
 const errorText = computed(() => {
@@ -63,10 +59,6 @@ const errorText = computed(() => {
       </p>
       <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
         <span class="rg-metric">{{ formatBytes(item.size) }}</span>
-        <RgBadge v-if="tooBig" variant="neutral" data-testid="too-big-badge">
-          <RgIcon name="warning" :size="12" />
-          {{ t('upload.queue.tooBig') }}
-        </RgBadge>
         <span v-if="item.status === 'canceled'" class="text-ink-faint" data-testid="item-canceled">
           {{ t('upload.queue.canceled') }}
         </span>

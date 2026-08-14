@@ -16,6 +16,13 @@ const emit = defineEmits<{ files: [files: File[]] }>()
 const { t } = useI18n()
 const input = ref<HTMLInputElement | null>(null)
 
+// accept="image/*,video/*" hace que Chrome en Android abra el Photo Picker del
+// sistema, que LIMITA la multi-selección a ~100 (getPickImagesMaxLimit). En
+// Android se omite el accept para usar el explorador clásico (sin tope); en
+// iOS/desktop se conserva el filtro de galería (iOS no tiene ese límite).
+const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
+const acceptAttr = isAndroid ? undefined : 'image/*,video/*'
+
 // CONTADOR de dragenter/dragleave, no booleano: cada hijo por el que pasa el
 // puntero dispara su propio par enter/leave y un booleano parpadearía
 // (guard anti-flicker clásico)
@@ -67,7 +74,7 @@ function onPick(event: Event) {
       ref="input"
       data-testid="dropzone-input"
       type="file"
-      accept="image/*,video/*"
+      :accept="acceptAttr"
       multiple
       class="hidden"
       @change="onPick"
