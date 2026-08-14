@@ -15,6 +15,8 @@ export const organize = {
     'Sin avisos | 1 archivo sin clasificar irá a _unknown/ al organizar | {n} archivos sin clasificar irán a _unknown/ al organizar',
   empty: 'El input está vacío. Sube fotos o vídeos para empezar.',
   emptyAction: 'Subir archivos',
+  // fila bajo la grid mientras el scroll infinito trae la siguiente página
+  loadingMore: 'Cargando más…',
   kinds: {
     photo: 'Foto',
     video: 'Vídeo',

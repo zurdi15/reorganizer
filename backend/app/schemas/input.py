@@ -17,6 +17,15 @@ class InputFile(BaseModel):
     kind: str
 
 
+class InputFilesPage(BaseModel):
+    """Página del listado de input (paginado para escalar a miles de ficheros
+    sin renderizarlos todos de golpe)."""
+
+    files: list[InputFile]
+    # total de ficheros en el input (para saber si quedan más páginas)
+    total: int
+
+
 class InputSummary(BaseModel):
     total: int
     photo: int

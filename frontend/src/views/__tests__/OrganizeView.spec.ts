@@ -59,7 +59,7 @@ describe('OrganizeView', () => {
         if (url === '/api/v1/jobs' && init?.method === 'POST') {
           return jsonResponse(makeJob({ status: 'planning', total: 0, done: 0 }), 202)
         }
-        if (url.includes('/input/files')) return jsonResponse(FILES)
+        if (url.includes('/input/files')) return jsonResponse({ files: FILES, total: FILES.length })
         if (url.includes('/input/summary')) return jsonResponse({ photo: 1, video: 0, unknown: 0, total: 1 })
         if (url.includes('/input/dates')) return jsonResponse({ years: [], months_by_year: {} })
         if (url.includes('/items')) return jsonResponse([])
@@ -112,7 +112,7 @@ describe('OrganizeView', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
-        if (url.includes('/input/files')) return jsonResponse([])
+        if (url.includes('/input/files')) return jsonResponse({ files: [], total: 0 })
         if (url.includes('/input/summary')) return jsonResponse({ photo: 0, video: 0, unknown: 0, total: 0 })
         if (url.includes('/input/dates')) return jsonResponse({ years: [], months_by_year: {} })
         return jsonResponse([])

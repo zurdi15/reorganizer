@@ -2,6 +2,7 @@
 cliente pasa por resolve_under (PathError → 400 invalid_path en el handler
 global de main.py)."""
 
+import asyncio
 import os
 import re
 from collections.abc import Iterator
@@ -16,7 +17,13 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..db import get_db
 from ..models import Rule
-from ..schemas.input import InputDates, InputFile, InputProbe, InputSummary
+from ..schemas.input import (
+    InputDates,
+    InputFile,
+    InputFilesPage,
+    InputProbe,
+    InputSummary,
+)
 from ..services import metadata, thumbs
 from ..services import rules as rules_engine
 from ..services.paths import resolve_under
@@ -38,13 +45,27 @@ def _iter_files(root: Path) -> Iterator[Path]:
             yield Path(dirpath) / name
 
 
-@router.get("/files", response_model=list[InputFile])
-def list_files() -> list[InputFile]:
+@router.get("/files", response_model=InputFilesPage)
+async def list_files(
+    limit: int = Query(0, ge=0), offset: int = Query(0, ge=0)
+) -> InputFilesPage:
+    """Listado paginado del input. `limit=0` = todos (curl/scripts); la grid
+    pide páginas y va cargando al hacer scroll — así miles de ficheros no se
+    listan ni renderizan de golpe. El walk (os.walk + stat) va en un hilo."""
     root = get_settings().input_dir
     if not root.is_dir():
-        return []
+        return InputFilesPage(files=[], total=0)
+    return await asyncio.to_thread(_collect_files, root, offset, limit)
+
+
+def _collect_files(root, offset: int, limit: int) -> InputFilesPage:
+    # el walk solo produce rutas (barato); el total sale de contarlas y SOLO se
+    # hace stat de la página pedida — no de los miles de ficheros
+    paths = list(_iter_files(root))
+    total = len(paths)
+    page = paths[offset : offset + limit] if limit else paths[offset:]
     files: list[InputFile] = []
-    for path in _iter_files(root):
+    for path in page:
         try:
             # el archivo puede desaparecer entre el walk y el stat (borrado
             # concurrente, ESTALE de NFS): se salta sin romper el listado
@@ -60,7 +81,7 @@ def list_files() -> list[InputFile]:
                 kind=thumbs.kind_for(path),
             )
         )
-    return files
+    return InputFilesPage(files=files, total=total)
 
 
 @router.get("/summary", response_model=InputSummary)

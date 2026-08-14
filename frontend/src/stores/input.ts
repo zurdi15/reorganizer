@@ -9,19 +9,34 @@ import {
 } from '@/api/input'
 import type { InputDates, InputFile, InputSummary } from '@/types/api'
 
-// Estado del folder de entrada: listado + contadores + sugerencias EXIF.
-// La verdad vive en el server (LAN, sin capa offline): refresh() recarga
-// las tres lecturas a la vez y deduplica llamadas en vuelo — la grid, el
-// evento WS input-changed y el drenado de subidas pueden pedirlo casi
-// simultáneamente sin triplicar peticiones.
+// tamaño de página del listado: la grid arranca con esta primera tanda y el
+// scroll infinito va apilando páginas de PAGE_SIZE en PAGE_SIZE. El folder
+// puede tener miles de archivos — jamás se traen todos de golpe.
+const PAGE_SIZE = 200
+
+// Estado del folder de entrada: listado PAGINADO + contadores + sugerencias
+// EXIF. La verdad vive en el server (LAN, sin capa offline): refresh() recarga
+// la página 1 y los contadores/fechas a la vez y deduplica llamadas en vuelo —
+// la grid, el evento WS input-changed y el drenado de subidas pueden pedirlo
+// casi simultáneamente sin triplicar peticiones.
 export const useInputStore = defineStore('input', () => {
+  // acumula las páginas cargadas (append en loadMore); refresh() lo resetea
   const files = ref<InputFile[]>([])
+  // total REAL del folder (del server), no files.length — la cabecera y
+  // hasMore se apoyan en él aunque solo haya cargado una página
+  const total = ref(0)
   const summary = ref<InputSummary | null>(null)
   const dates = ref<InputDates | null>(null)
   const loading = ref(false)
+  // cargando la página SIGUIENTE (scroll infinito), distinto de loading (que
+  // es el primer load / el refresh a página 1)
+  const loadingMore = ref(false)
   // primer load completado (con éxito o no): la grid distingue "cargando"
   // de "vacío de verdad" sin flashear el estado vacío antes de tiempo
   const loaded = ref(false)
+
+  // ¿quedan páginas por traer? la grid solo arma el sentinel de scroll si sí
+  const hasMore = computed(() => files.value.length < total.value)
 
   // promesa compartida del refresh en vuelo — el deduplicador
   let inflight: Promise<void> | null = null
@@ -34,9 +49,15 @@ export const useInputStore = defineStore('input', () => {
     // encadenado arranca una petición nueva (y no hay bucle: solo un eslabón).
     if (inflight) return inflight.catch(() => {}).then(() => refresh())
     loading.value = true
-    inflight = Promise.all([fetchInputFiles(), fetchInputSummary(), fetchInputDates()])
-      .then(([nextFiles, nextSummary, nextDates]) => {
-        files.value = nextFiles
+    inflight = Promise.all([
+      fetchInputFiles({ limit: PAGE_SIZE, offset: 0 }),
+      fetchInputSummary(),
+      fetchInputDates(),
+    ])
+      .then(([page, nextSummary, nextDates]) => {
+        // reset a la página 1: se REEMPLAZA lo acumulado, no se apila
+        files.value = page.files
+        total.value = page.total
         summary.value = nextSummary
         dates.value = nextDates
       })
@@ -48,17 +69,38 @@ export const useInputStore = defineStore('input', () => {
     return inflight
   }
 
+  // scroll infinito: trae la página siguiente (offset = lo ya cargado) y la
+  // APILA — sin recargar ni perder la posición del scroll. No-op si ya no
+  // quedan páginas o si hay otra en vuelo (el sentinel puede dispararse varias
+  // veces seguidas): el guard mata la doble llamada concurrente.
+  async function loadMore(): Promise<void> {
+    if (loadingMore.value || !hasMore.value) return
+    loadingMore.value = true
+    try {
+      const page = await fetchInputFiles({ limit: PAGE_SIZE, offset: files.value.length })
+      files.value = [...files.value, ...page.files]
+      total.value = page.total
+    } finally {
+      loadingMore.value = false
+    }
+  }
+
   // borrar un archivo del input (basura detectada en la sheet de detalle):
-  // DELETE y después recarga completa — los contadores y las sugerencias
-  // EXIF pueden haber cambiado, no solo el listado
+  // DELETE y luego se quita ese archivo de la lista EN LOCAL + se decrementa
+  // total — más barato que un refresh completo y conserva el scroll. El
+  // summary sí se recarga (los badges de la cabecera deben cuadrar).
   async function removeFile(path: string): Promise<void> {
     await deleteInputFile(path)
-    await refresh()
+    const before = files.value.length
+    files.value = files.value.filter((file) => file.path !== path)
+    if (files.value.length < before) total.value = Math.max(0, total.value - 1)
+    summary.value = await fetchInputSummary()
   }
 
   // evento WS input-changed (fin de uploads y de jobs): los counts llegan en
   // el propio mensaje — se aplican al instante (la banda/badges reaccionan
-  // ya) y el listado se recarga deduplicado detrás
+  // ya) y el listado se recarga a la PÁGINA 1 deduplicado detrás (el folder
+  // cambió: no basta con parchear en local)
   function applyInputChanged(counts: InputSummary) {
     summary.value = counts
     void refresh().catch(() => {
@@ -87,13 +129,17 @@ export const useInputStore = defineStore('input', () => {
 
   return {
     files,
+    total,
     summary,
     dates,
     loading,
+    loadingMore,
     loaded,
+    hasMore,
     suggestedYears,
     monthsForYear,
     refresh,
+    loadMore,
     removeFile,
     applyInputChanged,
   }

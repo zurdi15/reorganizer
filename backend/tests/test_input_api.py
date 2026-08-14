@@ -39,7 +39,9 @@ def test_list_files_recursive_skips_dotfiles(client):
 
     resp = client.get("/api/v1/input/files")
     assert resp.status_code == 200
-    files = resp.json()
+    body = resp.json()
+    assert body["total"] == 3
+    files = body["files"]
     assert [f["path"] for f in files] == ["a.jpg", "notas.txt", "sub/b.mp4"]
     by_path = {f["path"]: f for f in files}
     assert by_path["a.jpg"]["kind"] == "photo"
@@ -51,7 +53,21 @@ def test_list_files_recursive_skips_dotfiles(client):
 
 
 def test_list_files_empty_input(client):
-    assert client.get("/api/v1/input/files").json() == []
+    assert client.get("/api/v1/input/files").json() == {"files": [], "total": 0}
+
+
+def test_list_files_pagination(client):
+    root = get_settings().input_dir
+    for i in range(10):
+        make_jpeg(root / f"f{i:02d}.jpg")
+    # página: total real + solo `limit` ficheros, desplazados por `offset`
+    page = client.get("/api/v1/input/files", params={"limit": 3, "offset": 4}).json()
+    assert page["total"] == 10
+    assert [f["path"] for f in page["files"]] == ["f04.jpg", "f05.jpg", "f06.jpg"]
+    # más allá del final: página vacía, total intacto
+    tail = client.get("/api/v1/input/files", params={"limit": 5, "offset": 8}).json()
+    assert [f["path"] for f in tail["files"]] == ["f08.jpg", "f09.jpg"]
+    assert tail["total"] == 10
 
 
 # ── GET /input/summary ─────────────────────────────────────────────────────

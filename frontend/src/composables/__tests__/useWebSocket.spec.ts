@@ -95,7 +95,7 @@ describe('useWebSocket', () => {
       vi.fn(async (url: string) =>
         jsonResponse(
           url.includes('/input/files')
-            ? []
+            ? { files: [], total: 0 }
             : url.includes('/input/dates')
               ? { years: [], months_by_year: {} }
               : { photo: 0, video: 0, unknown: 0, total: 0 },

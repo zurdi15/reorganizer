@@ -9,6 +9,7 @@ export const organize = {
     'No warnings | 1 unclassified file will go to _unknown/ when organizing | {n} unclassified files will go to _unknown/ when organizing',
   empty: 'The input folder is empty. Upload photos or videos to get started.',
   emptyAction: 'Upload files',
+  loadingMore: 'Loading more…',
   kinds: {
     photo: 'Photo',
     video: 'Video',

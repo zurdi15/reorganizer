@@ -38,7 +38,7 @@ function defaultFetchMock(overrides: Record<string, unknown> = {}) {
     for (const [needle, data] of Object.entries(overrides)) {
       if (url.includes(needle) && (init?.method ?? 'GET') !== 'POST') return jsonResponse(data)
     }
-    if (url.includes('/input/files')) return jsonResponse([])
+    if (url.includes('/input/files')) return jsonResponse({ files: [], total: 0 })
     if (url.includes('/input/summary')) return jsonResponse({ photo: 0, video: 0, unknown: 0, total: 0 })
     if (url.includes('/input/dates')) return jsonResponse({ years: [], months_by_year: {} })
     if (url.includes('/items')) return jsonResponse([])
@@ -120,7 +120,8 @@ describe('stores/organize', () => {
     expect(organize.stage).toBe('compose')
     await vi.waitFor(() => {
       const urls = fetchMock.mock.calls.map(([url]) => url)
-      expect(urls).toContain('/api/v1/input/files')
+      // el listado ahora se pide paginado (?limit&offset) → prefijo, no exacto
+      expect(urls.some((url) => typeof url === 'string' && url.startsWith('/api/v1/input/files'))).toBe(true)
     })
   })
 

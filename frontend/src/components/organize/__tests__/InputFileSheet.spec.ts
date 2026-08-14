@@ -34,7 +34,7 @@ function stubFetch(probe: InputProbe = PROBE) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'DELETE') return { ok: true, status: 204, json: async () => ({}) } as unknown as Response
     if (url.includes('/input/probe')) return jsonResponse(probe)
-    if (url.includes('/input/files')) return jsonResponse([])
+    if (url.includes('/input/files')) return jsonResponse({ files: [], total: 0 })
     if (url.includes('/input/summary')) return jsonResponse({ photo: 0, video: 0, unknown: 0, total: 0 })
     if (url.includes('/input/dates')) return jsonResponse({ years: [], months_by_year: {} })
     throw new Error(`ruta sin mock: ${url}`)

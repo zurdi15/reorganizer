@@ -19,6 +19,15 @@ export interface InputFile {
   kind: MediaKind
 }
 
+// página del listado del input (GET /input/files?limit=&offset=). El backend
+// pagina: `total` es el recuento REAL del folder (miles de archivos posibles),
+// independiente de cuántos se hayan traído en esta página. limit=0 → todos
+// (curl/scripts); la UI siempre pide páginas acotadas.
+export interface InputFilesPage {
+  files: InputFile[]
+  total: number
+}
+
 // contadores por kind (GET /input/summary)
 export interface InputSummary {
   photo: number

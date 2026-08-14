@@ -2,10 +2,19 @@
 // api(): la política de errores (ApiError/OfflineError) vive en client.ts y
 // el estado en stores/input.ts — aquí solo URLs y tipos.
 import { api } from './client'
-import type { InputDates, InputFile, InputProbe, InputSummary } from '@/types/api'
+import type { InputDates, InputFilesPage, InputProbe, InputSummary } from '@/types/api'
 
-export function fetchInputFiles(): Promise<InputFile[]> {
-  return api<InputFile[]>('/input/files')
+// listado paginado del input: la grid arranca con la primera página y el
+// scroll infinito pide las siguientes por offset. Devuelve la página + el
+// total real del folder (para hasMore); nunca se traen todos los archivos.
+export function fetchInputFiles({
+  limit,
+  offset,
+}: {
+  limit: number
+  offset: number
+}): Promise<InputFilesPage> {
+  return api<InputFilesPage>(`/input/files?limit=${limit}&offset=${offset}`)
 }
 
 export function fetchInputSummary(): Promise<InputSummary> {

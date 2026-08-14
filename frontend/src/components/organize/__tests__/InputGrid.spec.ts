@@ -20,11 +20,32 @@ function jsonResponse(data: unknown): Response {
   return { ok: true, status: 200, json: async () => data } as unknown as Response
 }
 
-async function mountGrid(seed: { files?: InputFile[]; summary?: InputSummary | null } = {}) {
+// IntersectionObserver de mentira: captura las instancias creadas y expone
+// trigger() para simular que el sentinel entra en viewport
+class MockIO {
+  static instances: MockIO[] = []
+  cb: IntersectionObserverCallback
+  constructor(cb: IntersectionObserverCallback) {
+    this.cb = cb
+    MockIO.instances.push(this)
+  }
+  observe() {}
+  disconnect() {}
+  unobserve() {}
+  trigger() {
+    this.cb([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+  }
+}
+
+async function mountGrid(
+  seed: { files?: InputFile[]; summary?: InputSummary | null; total?: number } = {},
+) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const input = useInputStore()
   input.files = seed.files ?? FILES
+  // total por defecto = nº de archivos sembrados → hasMore false (todo cargado)
+  input.total = seed.total ?? (seed.files ?? FILES).length
   input.summary = 'summary' in seed ? (seed.summary ?? null) : SUMMARY
   input.loaded = true
 
@@ -42,7 +63,7 @@ async function mountGrid(seed: { files?: InputFile[]; summary?: InputSummary | n
 describe('InputGrid', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (url.includes('/input/files')) return jsonResponse(FILES)
+      if (url.includes('/input/files')) return jsonResponse({ files: FILES, total: FILES.length })
       if (url.includes('/input/summary')) return jsonResponse(SUMMARY)
       if (url.includes('/input/dates')) return jsonResponse({ years: [], months_by_year: {} })
       if (url.includes('/input/probe')) {
@@ -109,7 +130,70 @@ describe('InputGrid', () => {
     await flushPromises()
 
     const urls = fetchMock.mock.calls.map(([url]) => url)
-    expect(urls).toEqual(['/api/v1/input/files', '/api/v1/input/summary', '/api/v1/input/dates'])
+    // el listado se pide paginado a la página 1 (offset=0, limit=PAGE_SIZE)
+    expect(urls).toEqual([
+      '/api/v1/input/files?limit=200&offset=0',
+      '/api/v1/input/summary',
+      '/api/v1/input/dates',
+    ])
+  })
+
+  it('renders the scroll sentinel + spinner only while more pages remain, and drops them once fully loaded', async () => {
+    // hasMore = 3 cargados < 5 totales → sentinel presente, sin fila de carga
+    const { wrapper } = await mountGrid({ total: 5 })
+    expect(wrapper.find('[data-testid="input-sentinel"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="input-loading-more"]').exists()).toBe(false)
+    // el contador muestra el TOTAL del folder (5), no los 3 cargados
+    expect(wrapper.get('[data-testid="input-count"]').text()).toBe('5 archivos')
+
+    // todo cargado → ni sentinel ni fila de carga
+    const { wrapper: full } = await mountGrid({ total: 3 })
+    expect(full.find('[data-testid="input-sentinel"]').exists()).toBe(false)
+  })
+
+  it('the scroll sentinel calls loadMore (next page, offset = loaded count) when it intersects', async () => {
+    MockIO.instances = []
+    vi.stubGlobal('IntersectionObserver', MockIO)
+    const PAGE2: InputFile[] = [
+      { path: 'p3.jpg', name: 'p3.jpg', size_bytes: 1, mtime: 1, kind: 'photo' },
+      { path: 'p4.jpg', name: 'p4.jpg', size_bytes: 1, mtime: 1, kind: 'photo' },
+      { path: 'p5.jpg', name: 'p5.jpg', size_bytes: 1, mtime: 1, kind: 'photo' },
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/input/files')) {
+          const offset = Number(new URL(url, 'http://x').searchParams.get('offset'))
+          return jsonResponse(offset >= 3 ? { files: PAGE2, total: 6 } : { files: FILES, total: 6 })
+        }
+        if (url.includes('/input/summary')) return jsonResponse(SUMMARY)
+        if (url.includes('/input/dates')) return jsonResponse({ years: [], months_by_year: {} })
+        throw new Error(`ruta sin mock: ${url}`)
+      }),
+    )
+
+    // 3 cargados de 6 → hay página siguiente
+    const { input } = await mountGrid({ total: 6 })
+    expect(input.hasMore).toBe(true)
+
+    const io = MockIO.instances.at(-1)
+    expect(io).toBeDefined()
+    io!.trigger()
+    await flushPromises()
+
+    // se pidió la página siguiente (offset = nº cargado) y se apiló
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    const filesCall = fetchMock.mock.calls.find(([u]) => String(u).includes('/input/files'))
+    expect(String(filesCall?.[0])).toContain('offset=3')
+    expect(input.files.map((f) => f.path)).toEqual([
+      'sub/a b.jpg',
+      'DJI_0042.MP4',
+      'notas.txt',
+      'p3.jpg',
+      'p4.jpg',
+      'p5.jpg',
+    ])
+    expect(input.hasMore).toBe(false)
   })
 
   it('tapping a card opens the detail sheet (probe-on-open) with the file name as TEXT (anti-XSS)', async () => {
