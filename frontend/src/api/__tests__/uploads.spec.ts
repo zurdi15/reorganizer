@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, OfflineError } from '@/api/client'
 import { UploadAbortError, uploadFile } from '@/api/uploads'
 
-// XHR de mentira controlable desde el test: registra cada instancia para
-// inspeccionar método/URL/cuerpo y disparar sus callbacks a mano
+// XHR de mentira controlable desde el test: la subida por trozos encadena
+// varias requests (POST /session → PUT chunk → POST complete), así que el test
+// responde a cada instancia según va apareciendo.
 class MockXHR {
   static instances: MockXHR[] = []
 
@@ -16,6 +17,7 @@ class MockXHR {
   responseText = ''
   method = ''
   url = ''
+  headers: Record<string, string> = {}
   sent: unknown = null
   aborted = false
 
@@ -28,8 +30,12 @@ class MockXHR {
     this.url = url
   }
 
-  send(body: unknown) {
-    this.sent = body
+  setRequestHeader(name: string, value: string) {
+    this.headers[name] = value
+  }
+
+  send(body?: unknown) {
+    this.sent = body ?? null
   }
 
   abort() {
@@ -48,9 +54,19 @@ function lastXhr(): MockXHR {
   return MockXHR.instances.at(-1)!
 }
 
-const file = new File(['abc'], 'foto.jpg', { type: 'image/jpeg' })
+// deja correr los await encadenados del api hasta que aparece la siguiente XHR
+const flush = () => new Promise((r) => setTimeout(r, 0))
 
-describe('api/uploads (XHR)', () => {
+// 3 bytes → un solo trozo: POST session → PUT (offset 0) → POST complete
+const file = new File(['abc'], 'foto.jpg', { type: 'image/jpeg' })
+const RESULT = {
+  original_name: 'foto.jpg',
+  stored_name: 'foto.jpg',
+  size_bytes: 3,
+  media_type: 'photo',
+}
+
+describe('api/uploads (chunked)', () => {
   beforeEach(() => {
     MockXHR.instances = []
     vi.stubGlobal('XMLHttpRequest', MockXHR)
@@ -60,39 +76,78 @@ describe('api/uploads (XHR)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('POSTs multipart to /api/v1/uploads with the file under the `files` field', () => {
-    uploadFile(file)
-    const xhr = lastXhr()
-    expect(xhr.method).toBe('POST')
-    expect(xhr.url).toBe('/api/v1/uploads')
-    expect(xhr.sent).toBeInstanceOf(FormData)
-    expect((xhr.sent as FormData).get('files')).toBe(file)
-  })
-
-  it('reports byte-based upload progress as a 0..1 fraction', () => {
+  it('opens a session, PUTs the chunk with X-Chunk-Offset and completes', async () => {
     const onProgress = vi.fn()
-    uploadFile(file, { onProgress })
-    const xhr = lastXhr()
+    const { promise } = uploadFile(file, { onProgress })
 
-    xhr.upload.onprogress!({ lengthComputable: true, loaded: 512, total: 1024 } as ProgressEvent)
-    expect(onProgress).toHaveBeenLastCalledWith(0.5)
+    await flush()
+    let xhr = lastXhr()
+    expect(xhr.method).toBe('POST')
+    expect(xhr.url).toBe('/api/v1/uploads/session')
+    expect(JSON.parse(xhr.sent as string)).toEqual({ filename: 'foto.jpg', total_size: 3 })
+    xhr.respond(201, JSON.stringify({ upload_id: 'U1', received: 0, total_size: 3 }))
 
-    // sin longitud computable no hay fracción que inventar
-    xhr.upload.onprogress!({ lengthComputable: false, loaded: 9, total: 0 } as ProgressEvent)
-    expect(onProgress).toHaveBeenCalledTimes(1)
+    await flush()
+    xhr = lastXhr()
+    expect(xhr.method).toBe('PUT')
+    expect(xhr.url).toBe('/api/v1/uploads/session/U1')
+    expect(xhr.headers['X-Chunk-Offset']).toBe('0')
+    expect(xhr.sent).toBeInstanceOf(Blob)
+    // progreso acumulado: (offset 0 + loaded)/size
+    xhr.upload.onprogress!({ lengthComputable: true, loaded: 3, total: 3 } as ProgressEvent)
+    expect(onProgress).toHaveBeenLastCalledWith(1)
+    xhr.respond(200, JSON.stringify({ received: 3 }))
+
+    await flush()
+    xhr = lastXhr()
+    expect(xhr.method).toBe('POST')
+    expect(xhr.url).toBe('/api/v1/uploads/session/U1/complete')
+    xhr.respond(201, JSON.stringify(RESULT))
+
+    await expect(promise).resolves.toEqual([RESULT])
   })
 
-  it('resolves the parsed UploadResult[] on 201', async () => {
+  it('resyncs the offset when a chunk returns 409 chunk_out_of_order', async () => {
     const { promise } = uploadFile(file)
-    const body = [
-      { original_name: 'foto.jpg', stored_name: 'foto.jpg', size_bytes: 3, media_type: 'photo' },
-    ]
-    lastXhr().respond(201, JSON.stringify(body))
-    await expect(promise).resolves.toEqual(body)
+    await flush()
+    lastXhr().respond(201, JSON.stringify({ upload_id: 'U1', received: 0, total_size: 3 }))
+
+    await flush()
+    // el server dice que ya tiene 2 bytes → el cliente reanuda desde offset 2
+    lastXhr().respond(
+      409,
+      JSON.stringify({ detail: { slug: 'chunk_out_of_order', received: 2 } }),
+    )
+
+    await flush()
+    const retryXhr = lastXhr()
+    expect(retryXhr.method).toBe('PUT')
+    expect(retryXhr.headers['X-Chunk-Offset']).toBe('2')
+    retryXhr.respond(200, JSON.stringify({ received: 3 }))
+
+    await flush()
+    lastXhr().respond(201, JSON.stringify(RESULT))
+    await expect(promise).resolves.toEqual([RESULT])
   })
 
-  it('rejects with ApiError carrying the backend slug (413 file_too_large)', async () => {
+  it('resumes an existing session via GET instead of re-opening', async () => {
+    const { promise } = uploadFile(file, { resume: { uploadId: 'OLD' } })
+    await flush()
+    const getXhr = lastXhr()
+    expect(getXhr.method).toBe('GET')
+    expect(getXhr.url).toBe('/api/v1/uploads/session/OLD')
+    getXhr.respond(200, JSON.stringify({ upload_id: 'OLD', received: 3, total_size: 3 }))
+    // received == size ⇒ salta directo a complete, sin más PUT
+    await flush()
+    const completeXhr = lastXhr()
+    expect(completeXhr.url).toBe('/api/v1/uploads/session/OLD/complete')
+    completeXhr.respond(201, JSON.stringify(RESULT))
+    await expect(promise).resolves.toEqual([RESULT])
+  })
+
+  it('rejects with ApiError carrying the backend slug (413 on session open)', async () => {
     const { promise } = uploadFile(file)
+    await flush()
     lastXhr().respond(413, JSON.stringify({ detail: 'file_too_large' }))
     const error = await promise.catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ApiError)
@@ -102,20 +157,22 @@ describe('api/uploads (XHR)', () => {
 
   it('falls back to the generic slug on an unparseable error body', async () => {
     const { promise } = uploadFile(file)
+    await flush()
     lastXhr().respond(502, '<html>Bad Gateway</html>')
     const error = await promise.catch((e: unknown) => e)
-    expect(error).toBeInstanceOf(ApiError)
     expect((error as ApiError).slug).toBe('generic')
   })
 
-  it('rejects with OfflineError on a network failure', async () => {
+  it('rejects with OfflineError on a network failure opening the session', async () => {
     const { promise } = uploadFile(file)
+    await flush()
     lastXhr().onerror!()
     await expect(promise).rejects.toBeInstanceOf(OfflineError)
   })
 
-  it('abort() aborts the underlying XHR and rejects with UploadAbortError', async () => {
+  it('abort() aborts the in-flight XHR and rejects with UploadAbortError', async () => {
     const { promise, abort } = uploadFile(file)
+    await flush()
     abort()
     expect(lastXhr().aborted).toBe(true)
     await expect(promise).rejects.toBeInstanceOf(UploadAbortError)

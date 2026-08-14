@@ -11,6 +11,10 @@ export const errors = {
   // slugs de POST /uploads (fase 11)
   too_many_files: 'Demasiados archivos en una sola petición.',
   no_files: 'La petición llegó sin archivos.',
+  // subida por trozos (archivos grandes)
+  upload_not_found: 'La subida caducó. Vuelve a empezarla.',
+  chunk_out_of_order: 'Se perdió la sincronía de la subida; reintentando.',
+  upload_incomplete: 'La subida quedó incompleta; reintentando.',
   job_already_active: 'Ya hay un trabajo en marcha. Espera a que termine.',
   not_implemented: 'Esta función todavía no está disponible.',
   // slugs de PUT /settings y POST /settings/immich/* (fase 13)

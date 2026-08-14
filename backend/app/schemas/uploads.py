@@ -1,6 +1,27 @@
 """Schemas de la API de subidas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class UploadSessionCreate(BaseModel):
+    """Apertura de una subida por trozos."""
+
+    filename: str
+    total_size: int = Field(ge=0)
+
+
+class UploadSession(BaseModel):
+    """Estado de una sesión por trozos (creación y reanudación)."""
+
+    upload_id: str
+    received: int
+    total_size: int
+
+
+class ChunkAck(BaseModel):
+    """Confirmación de un trozo: bytes recibidos hasta ahora."""
+
+    received: int
 
 
 class UploadResult(BaseModel):

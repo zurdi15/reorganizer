@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import { ApiError, OfflineError } from '@/api/client'
-import { UploadAbortError, uploadFile } from '@/api/uploads'
+import { deleteSession, type ResumeState, UploadAbortError, uploadFile } from '@/api/uploads'
 import { i18n } from '@/i18n'
 import { useToastStore } from '@/stores/toast'
 
@@ -84,6 +84,20 @@ export const useUploadsStore = defineStore('uploads', () => {
   // reactivo (no son datos, no deben proxificarse ni serializarse)
   const aborts = new Map<number, () => void>()
 
+  // estado de reanudación por item (uploadId + received): un retry CONTINÚA la
+  // subida por trozos desde donde iba, no la reempieza (clave con GB en juego).
+  // Fuera del estado reactivo: lo muta el api en cada trozo.
+  const resumes = new Map<number, ResumeState>()
+
+  function resumeFor(id: number): ResumeState {
+    let state = resumes.get(id)
+    if (!state) {
+      state = {}
+      resumes.set(id, state)
+    }
+    return state
+  }
+
   // nº de lote: un lote nuevo empieza en el primer enqueue/retry tras un
   // drenado; los items llevan su nº para saber si cuentan en el slab actual
   let batchSeq = 0
@@ -147,8 +161,9 @@ export const useUploadsStore = defineStore('uploads', () => {
 
   function start(item: UploadItem) {
     item.status = 'uploading'
-    item.progress = 0
+    // no se resetea progress: en un retry se reanuda desde el % ya subido
     const { promise, abort } = uploadFile(item.file, {
+      resume: resumeFor(item.id),
       onProgress: (fraction) => {
         item.progress = fraction
       },
@@ -159,6 +174,7 @@ export const useUploadsStore = defineStore('uploads', () => {
         item.status = 'done'
         item.progress = 1
         done.value++
+        resumes.delete(item.id) // sesión ya consumida por complete
       })
       .catch((error: unknown) => {
         // cancel() marca ANTES de abortar; el rechazo del XHR llega después
@@ -166,6 +182,7 @@ export const useUploadsStore = defineStore('uploads', () => {
         if (item.status === 'canceled' || error instanceof UploadAbortError) {
           item.status = 'canceled'
         } else {
+          // se CONSERVA la sesión (resumes) para reanudar en el retry
           item.status = 'error'
           item.errorSlug = slugFor(error)
         }
@@ -198,13 +215,21 @@ export const useUploadsStore = defineStore('uploads', () => {
     beginBatchIfDrained()
     joinBatch(item)
     item.status = 'queued'
-    item.progress = 0
+    // no se resetea progress: el retry REANUDA desde el % ya subido
     item.errorSlug = undefined
     pump()
   }
 
   function retryFailed() {
     for (const item of items.value.filter((i) => i.status === 'error')) retry(item.id)
+  }
+
+  // libera la sesión de subida por trozos en el servidor (su .part, que con
+  // varios GB pesa) y olvida su estado de reanudación
+  function dropSession(id: number) {
+    const state = resumes.get(id)
+    if (state?.uploadId) deleteSession(state.uploadId)
+    resumes.delete(id)
   }
 
   function cancel(id: number) {
@@ -214,6 +239,7 @@ export const useUploadsStore = defineStore('uploads', () => {
     if (item.status === 'queued') {
       // nunca llegó a la red: fuera de la lista y su hueco del contador del
       // lote se devuelve (el slab no muestra fantasmas)
+      dropSession(id)
       releaseObjectUrl(item)
       items.value.splice(index, 1)
       if (item.batch === batchSeq && total.value > 0) total.value--
@@ -222,6 +248,7 @@ export const useUploadsStore = defineStore('uploads', () => {
       // marcar ANTES de abortar (ver el catch de start)
       item.status = 'canceled'
       aborts.get(id)?.()
+      dropSession(id)
     }
   }
 
@@ -231,15 +258,17 @@ export const useUploadsStore = defineStore('uploads', () => {
     for (const item of items.value.filter((i) => i.status === 'queued')) cancel(item.id)
   }
 
-  // limpia los estados terminales (done/error/canceled) — los activos se
-  // quedan. No toca done/total: son la foto del LOTE, no de la lista.
+  // limpia SOLO lo terminado-bien (done) y lo cancelado a propósito. Los
+  // fallidos (error) se QUEDAN: son justo lo que el usuario quiere reintentar,
+  // no lo que quiere barrer. No toca done/total: son la foto del LOTE.
   function clearFinished() {
     const keep: UploadItem[] = []
     for (const item of items.value) {
-      if (item.status === 'queued' || item.status === 'uploading') {
-        keep.push(item)
-      } else {
+      if (item.status === 'done' || item.status === 'canceled') {
         releaseObjectUrl(item)
+        resumes.delete(item.id)
+      } else {
+        keep.push(item)
       }
     }
     items.value = keep
@@ -253,10 +282,20 @@ export const useUploadsStore = defineStore('uploads', () => {
   })
 
   // iOS suspende los XHR al pasar a background: los interrumpidos aparecen
-  // como error (con retry visible) al rechazarse su promesa; al VOLVER a
-  // foreground se re-bombea la cola para que lo que quedó en queued siga.
+  // como error de RED (offline) al rechazarse su promesa. Al VOLVER a
+  // foreground se auto-reanudan (su sesión por trozos sigue viva: continúan
+  // desde received, sin re-subir los GB ya enviados) y se re-bombea la cola.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') pump()
+    if (document.visibilityState !== 'visible') return
+    for (const item of items.value) {
+      if (item.status === 'error' && item.errorSlug === 'offline') {
+        beginBatchIfDrained()
+        joinBatch(item)
+        item.status = 'queued'
+        item.errorSlug = undefined
+      }
+    }
+    pump()
   })
 
   return {

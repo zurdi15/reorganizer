@@ -192,3 +192,109 @@ def test_upload_broadcasts_input_changed(app, client):
     assert len(fake.sent) == 1
     # y queda apuntado en el ring de replay para el state-sync
     assert events[0] in app.state.broadcaster.events
+
+
+# ── subida por trozos, reanudable ────────────────────────────────────────────
+
+CHUNK = "/api/v1/uploads/session"
+
+
+def _put_chunk(client, upload_id, offset, data):
+    return client.put(
+        f"{CHUNK}/{upload_id}",
+        content=data,
+        headers={"X-Chunk-Offset": str(offset)},
+    )
+
+
+def test_chunked_upload_full_flow(client):
+    body = b"A" * 5000
+    sess = client.post(CHUNK, json={"filename": "grande.bin", "total_size": len(body)})
+    assert sess.status_code == 201
+    uid = sess.json()["upload_id"]
+    assert sess.json() == {"upload_id": uid, "received": 0, "total_size": 5000}
+    # tres trozos de 2000/2000/1000
+    for off, size in [(0, 2000), (2000, 2000), (4000, 1000)]:
+        r = _put_chunk(client, uid, off, body[off : off + size])
+        assert r.status_code == 200
+        assert r.json()["received"] == off + size
+    # estado reanudable
+    assert client.get(f"{CHUNK}/{uid}").json() == {
+        "upload_id": uid,
+        "received": 5000,
+        "total_size": 5000,
+    }
+    done = client.post(f"{CHUNK}/{uid}/complete")
+    assert done.status_code == 201
+    assert done.json()["stored_name"] == "grande.bin"
+    assert done.json()["size_bytes"] == 5000
+    landed = get_settings().input_dir / "grande.bin"
+    assert landed.read_bytes() == body
+
+
+def test_chunk_retry_is_idempotent(client):
+    body = b"0123456789" * 100  # 1000 bytes
+    uid = client.post(CHUNK, json={"filename": "a.bin", "total_size": 1000}).json()["upload_id"]
+    _put_chunk(client, uid, 0, body[:600])
+    # retry del MISMO offset (el ack se perdió): trunca a 400 y reescribe
+    r = _put_chunk(client, uid, 400, body[400:1000])
+    assert r.status_code == 200
+    assert r.json()["received"] == 1000
+    client.post(f"{CHUNK}/{uid}/complete")
+    assert (get_settings().input_dir / "a.bin").read_bytes() == body
+
+
+def test_chunk_out_of_order_returns_received(client):
+    uid = client.post(CHUNK, json={"filename": "a.bin", "total_size": 1000}).json()["upload_id"]
+    _put_chunk(client, uid, 0, b"x" * 500)
+    # hueco: offset 800 con solo 500 recibidos
+    r = _put_chunk(client, uid, 800, b"y" * 100)
+    assert r.status_code == 409
+    assert r.json()["detail"] == {"slug": "chunk_out_of_order", "received": 500}
+
+
+def test_chunk_session_not_found(client):
+    import uuid
+
+    missing = uuid.uuid4().hex
+    assert client.get(f"{CHUNK}/{missing}").status_code == 404
+    assert _put_chunk(client, missing, 0, b"x").status_code == 404
+    assert client.post(f"{CHUNK}/{missing}/complete").status_code == 404
+    # id no-uuid tampoco revienta: 404
+    assert client.get(f"{CHUNK}/../etc").status_code in (404, 400)
+
+
+def test_chunk_session_too_large(client):
+    max_mb = get_settings().max_upload_mb
+    resp = client.post(CHUNK, json={"filename": "x.bin", "total_size": (max_mb * 1024 * 1024) + 1})
+    assert resp.status_code == 413
+    assert resp.json()["detail"] == "file_too_large"
+
+
+def test_chunk_overflow_aborts_session(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "max_upload_mb", 1)
+    uid = client.post(CHUNK, json={"filename": "a.bin", "total_size": 500}).json()["upload_id"]
+    # se declara 500 pero se manda más → 413 y la sesión se aborta
+    r = _put_chunk(client, uid, 0, b"z" * 900)
+    assert r.status_code == 413
+    assert client.get(f"{CHUNK}/{uid}").status_code == 404
+
+
+def test_complete_incomplete_returns_received(client):
+    uid = client.post(CHUNK, json={"filename": "a.bin", "total_size": 1000}).json()["upload_id"]
+    _put_chunk(client, uid, 0, b"x" * 400)
+    r = client.post(f"{CHUNK}/{uid}/complete")
+    assert r.status_code == 409
+    assert r.json()["detail"] == {"slug": "upload_incomplete", "received": 400}
+
+
+def test_chunk_collision_and_delete(client):
+    (get_settings().input_dir / "a.bin").write_bytes(b"previo")
+    uid = client.post(CHUNK, json={"filename": "a.bin", "total_size": 3}).json()["upload_id"]
+    _put_chunk(client, uid, 0, b"new")
+    done = client.post(f"{CHUNK}/{uid}/complete")
+    assert done.json()["stored_name"] == "a (1).bin"
+    # DELETE de una sesión (aborto) es idempotente
+    uid2 = client.post(CHUNK, json={"filename": "b.bin", "total_size": 3}).json()["upload_id"]
+    assert client.delete(f"{CHUNK}/{uid2}").status_code == 204
+    assert client.get(f"{CHUNK}/{uid2}").status_code == 404

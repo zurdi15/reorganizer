@@ -21,6 +21,10 @@ estructura en disco.
 
 - 📱 **PWA instalable** (Android e iOS): subida multi-selección desde la galería
   con progreso por archivo. 100% responsive, mobile-first.
+- ⬆️ **Subidas grandes (varios GB) reanudables**: se trocean en el cliente y se
+  suben por partes; un corte de red o el móvil pasando a segundo plano no tira
+  la subida — se reanuda desde el último trozo confirmado. Los trozos pequeños
+  esquivan límites de tamaño del reverse proxy/ingress.
 - 🗂️ **Ruta destino libre**: `2025/08/croacia`, `2025/diario`, lo que quieras.
   El EXIF sugiere año/mes del lote; tú compones la ruta con autocompletado del
   árbol existente. Nunca se fuerza una estructura.
@@ -90,12 +94,15 @@ la base de datos y se editan desde **Ajustes** en la propia app.
 
 Reorganizer **no tiene login**: cualquiera que alcance el puerto puede ver y
 mover tus archivos. Exponlo solo en LAN/VPN (Tailscale, WireGuard) o detrás de
-un reverse proxy con autenticación (Authelia, basic auth…). Si usas proxy:
+un reverse proxy con autenticación (Authelia, basic auth…). Si usas proxy,
+necesita soporte de **upgrade WebSocket** para `/api/v1/ws`. Las subidas grandes
+van por trozos (peticiones pequeñas), así que no hace falta subir el límite de
+tamaño del cuerpo; solo si además usas la subida en un único POST (`POST
+/uploads`, para curl/scripts) conviene:
 
 ```nginx
-client_max_body_size 0;          # o >= RG_MAX_UPLOAD_MB
-proxy_request_buffering off;     # streaming de subidas grandes
-# y soporte de upgrade WebSocket para /api/v1/ws
+client_max_body_size 0;          # o >= RG_MAX_UPLOAD_MB (solo el POST único)
+proxy_request_buffering off;
 ```
 
 ## Desarrollo

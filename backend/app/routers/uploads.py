@@ -9,10 +9,15 @@ import asyncio
 import logging
 from dataclasses import asdict
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile
 
 from ..config import get_settings
-from ..schemas.uploads import UploadResult
+from ..schemas.uploads import (
+    ChunkAck,
+    UploadResult,
+    UploadSession,
+    UploadSessionCreate,
+)
 from ..services import uploads as uploads_service
 from .input import summary as input_summary
 
@@ -49,6 +54,72 @@ async def upload_files(
         raise HTTPException(status_code=413, detail="file_too_large") from None
     await _broadcast_input_changed(request)
     return results
+
+
+# ── subida por trozos, reanudable (para archivos grandes, varios GB) ──────────
+
+
+@router.post("/session", status_code=201, response_model=UploadSession)
+def create_session(body: UploadSessionCreate) -> UploadSession:
+    settings = get_settings()
+    try:
+        session = uploads_service.create_session(body.filename, body.total_size, settings)
+    except uploads_service.UploadTooLargeError:
+        raise HTTPException(status_code=413, detail="file_too_large") from None
+    return UploadSession(**session)
+
+
+@router.get("/session/{upload_id}", response_model=UploadSession)
+def get_session(upload_id: str) -> UploadSession:
+    settings = get_settings()
+    try:
+        status = uploads_service.session_status(upload_id, settings)
+    except uploads_service.UploadNotFoundError:
+        raise HTTPException(status_code=404, detail="upload_not_found") from None
+    return UploadSession(upload_id=upload_id, **status)
+
+
+@router.put("/session/{upload_id}", response_model=ChunkAck)
+async def put_chunk(
+    upload_id: str,
+    request: Request,
+    x_chunk_offset: int = Header(...),
+) -> ChunkAck:
+    settings = get_settings()
+    try:
+        received = await uploads_service.append_chunk(
+            upload_id, x_chunk_offset, request.stream(), settings
+        )
+    except uploads_service.UploadNotFoundError:
+        raise HTTPException(status_code=404, detail="upload_not_found") from None
+    except uploads_service.ChunkOutOfOrderError as exc:
+        # 409 + received para que el cliente resincronice el offset
+        raise HTTPException(
+            status_code=409, detail={"slug": "chunk_out_of_order", "received": exc.received}
+        ) from None
+    except uploads_service.UploadTooLargeError:
+        raise HTTPException(status_code=413, detail="file_too_large") from None
+    return ChunkAck(received=received)
+
+
+@router.post("/session/{upload_id}/complete", status_code=201, response_model=UploadResult)
+async def complete_session(upload_id: str, request: Request) -> UploadResult:
+    settings = get_settings()
+    try:
+        stored = await uploads_service.complete_session(upload_id, settings)
+    except uploads_service.UploadNotFoundError:
+        raise HTTPException(status_code=404, detail="upload_not_found") from None
+    except uploads_service.UploadIncompleteError as exc:
+        raise HTTPException(
+            status_code=409, detail={"slug": "upload_incomplete", "received": exc.received}
+        ) from None
+    await _broadcast_input_changed(request)
+    return UploadResult(**asdict(stored))
+
+
+@router.delete("/session/{upload_id}", status_code=204)
+def delete_session(upload_id: str) -> None:
+    uploads_service.abort_session(upload_id, get_settings())
 
 
 async def _broadcast_input_changed(request: Request) -> None:

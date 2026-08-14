@@ -253,6 +253,22 @@ describe('stores/uploads', () => {
     expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:mock-2')
   })
 
+  it('clearFinished() KEEPS failed items so they can still be retried', async () => {
+    const store = useUploadsStore()
+    store.enqueue([makeFile('ok.jpg'), makeFile('boom.jpg')])
+    // ok.jpg termina; boom.jpg falla (no cancelado)
+    callsFor(store.items[0].file)[0].resolve([])
+    callsFor(store.items[1].file)[0].reject(new ApiError(500, 'transfer_failed'))
+    await flush()
+    expect(store.items[0].status).toBe('done')
+    expect(store.items[1].status).toBe('error')
+
+    store.clearFinished()
+    // el done se barre; el error SE QUEDA (es lo que se quiere reintentar)
+    expect(store.items.map((i) => i.status)).toEqual(['error'])
+    expect(store.items[0].name).toBe('boom.jpg')
+  })
+
   it('re-pumps the queue when the page returns to foreground (visibilitychange)', async () => {
     const store = useUploadsStore()
     const file = makeFile('a.jpg')
