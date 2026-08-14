@@ -2,7 +2,13 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import { ApiError, OfflineError } from '@/api/client'
-import { deleteSession, type ResumeState, UploadAbortError, uploadFile } from '@/api/uploads'
+import {
+  deleteSession,
+  type ResumeState,
+  UploadAbortError,
+  uploadFile,
+  UploadSkippedError,
+} from '@/api/uploads'
 import { i18n } from '@/i18n'
 import { useToastStore } from '@/stores/toast'
 
@@ -13,7 +19,10 @@ import { useToastStore } from '@/stores/toast'
 // la latencia sin saturar la radio del móvil.
 
 export type UploadKind = 'image' | 'video' | 'other'
-export type UploadStatus = 'queued' | 'uploading' | 'done' | 'error' | 'canceled'
+// `skipped`: ese nombre ya estaba en la bandeja y el ajuste de duplicados de
+// subida es `skip` — estado TERMINAL y de éxito, no un error (sin reintento:
+// volvería a saltarse; lo que cambia el resultado es el ajuste, en Ajustes)
+export type UploadStatus = 'queued' | 'uploading' | 'done' | 'error' | 'canceled' | 'skipped'
 
 export interface UploadItem {
   id: number
@@ -76,9 +85,14 @@ export const useUploadsStore = defineStore('uploads', () => {
   //   active: hay subidas en curso (queued/uploading)
   //   done/total: progreso del LOTE actual (se resetean al arrancar un lote
   //   nuevo tras un drenado)
+  //   skipped: archivos del lote que ya estaban en la bandeja. Fuera de
+  //   `done` a propósito (nada se subió), pero cuentan como resueltos: el
+  //   badge del nav suma `processed` para no quedarse clavado en 2/5
   const active = ref(false)
   const done = ref(0)
   const total = ref(0)
+  const skipped = ref(0)
+  const processed = computed(() => done.value + skipped.value)
 
   // abort() de las subidas en vuelo, por id — funciones fuera del estado
   // reactivo (no son datos, no deben proxificarse ni serializarse)
@@ -107,6 +121,7 @@ export const useUploadsStore = defineStore('uploads', () => {
     batchSeq++
     done.value = 0
     total.value = 0
+    skipped.value = 0
     active.value = true
   }
 
@@ -159,6 +174,14 @@ export const useUploadsStore = defineStore('uploads', () => {
     }
   }
 
+  function markSkipped(item: UploadItem) {
+    item.status = 'skipped'
+    item.progress = 1
+    item.errorSlug = undefined
+    skipped.value++
+    resumes.delete(item.id)
+  }
+
   function start(item: UploadItem) {
     item.status = 'uploading'
     // no se resetea progress: en un retry se reanuda desde el % ya subido
@@ -170,7 +193,13 @@ export const useUploadsStore = defineStore('uploads', () => {
     })
     aborts.set(item.id, abort)
     promise
-      .then(() => {
+      .then((results) => {
+        // el server puede haber saltado el archivo al finalizar (otra subida
+        // ganó la carrera con ese mismo nombre): el resultado lo dice
+        if (results?.[0]?.status === 'skipped') {
+          markSkipped(item)
+          return
+        }
         item.status = 'done'
         item.progress = 1
         done.value++
@@ -181,6 +210,9 @@ export const useUploadsStore = defineStore('uploads', () => {
         // y aquí se respeta — un abort jamás se disfraza de error
         if (item.status === 'canceled' || error instanceof UploadAbortError) {
           item.status = 'canceled'
+        } else if (error instanceof UploadSkippedError) {
+          // ni se abrió sesión: el nombre ya estaba en la bandeja
+          markSkipped(item)
         } else {
           // se CONSERVA la sesión (resumes) para reanudar en el retry
           item.status = 'error'
@@ -205,6 +237,14 @@ export const useUploadsStore = defineStore('uploads', () => {
       useToastStore().push(
         'ok',
         i18n.global.t('upload.toastDone', { n: done.value }, done.value),
+      )
+    }
+    if (skipped.value > 0) {
+      // aviso aparte (y no de error): los saltados no cambiaron la bandeja,
+      // pero el usuario tiene que enterarse de que no se subieron
+      useToastStore().push(
+        'info',
+        i18n.global.t('upload.toastSkipped', { n: skipped.value }, skipped.value),
       )
     }
   }
@@ -258,13 +298,14 @@ export const useUploadsStore = defineStore('uploads', () => {
     for (const item of items.value.filter((i) => i.status === 'queued')) cancel(item.id)
   }
 
-  // limpia SOLO lo terminado-bien (done) y lo cancelado a propósito. Los
-  // fallidos (error) se QUEDAN: son justo lo que el usuario quiere reintentar,
-  // no lo que quiere barrer. No toca done/total: son la foto del LOTE.
+  // limpia SOLO lo terminado-bien (done/skipped) y lo cancelado a propósito.
+  // Los fallidos (error) se QUEDAN: son justo lo que el usuario quiere
+  // reintentar, no lo que quiere barrer. No toca done/total: son la foto del
+  // LOTE.
   function clearFinished() {
     const keep: UploadItem[] = []
     for (const item of items.value) {
-      if (item.status === 'done' || item.status === 'canceled') {
+      if (item.status === 'done' || item.status === 'canceled' || item.status === 'skipped') {
         releaseObjectUrl(item)
         resumes.delete(item.id)
       } else {
@@ -276,7 +317,7 @@ export const useUploadsStore = defineStore('uploads', () => {
 
   // contadores derivados para el resumen ("3 subiendo · 12 en cola · …")
   const stats = computed(() => {
-    const s = { queued: 0, uploading: 0, done: 0, error: 0, canceled: 0 }
+    const s = { queued: 0, uploading: 0, done: 0, error: 0, canceled: 0, skipped: 0 }
     for (const item of items.value) s[item.status]++
     return s
   })
@@ -303,6 +344,8 @@ export const useUploadsStore = defineStore('uploads', () => {
     active,
     done,
     total,
+    skipped,
+    processed,
     stats,
     enqueue,
     pump,

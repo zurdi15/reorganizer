@@ -110,7 +110,7 @@ watch(() => route.path, () => {
             v-if="item.name === 'upload' && uploads.active"
             class="ml-auto rg-metric text-2xs px-1.5 py-0.5 rounded-full bg-amber/15 text-amber"
             data-testid="upload-badge-rail"
-          >{{ $t('shell.uploadsActive', { done: uploads.done, total: uploads.total }) }}</span>
+          >{{ $t('shell.uploadsActive', { done: uploads.processed, total: uploads.total }) }}</span>
         </RouterLink>
       </nav>
       <!-- pie sutil del rail: hint de locale (ES/EN). No duplica la versión de

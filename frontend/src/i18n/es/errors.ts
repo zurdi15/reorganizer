@@ -15,12 +15,16 @@ export const errors = {
   upload_not_found: 'La subida caducó. Vuelve a empezarla.',
   chunk_out_of_order: 'Se perdió la sincronía de la subida; reintentando.',
   upload_incomplete: 'La subida quedó incompleta; reintentando.',
+  // 409 al abrir sesión con «Duplicados al subir» = Saltar: el cliente lo
+  // trata como archivo saltado, así que este texto casi nunca se ve
+  file_exists: 'Ya hay un archivo con ese nombre en la bandeja de entrada.',
   job_already_active: 'Ya hay un trabajo en marcha. Espera a que termine.',
   not_implemented: 'Esta función todavía no está disponible.',
   // slugs de PUT /settings y POST /settings/immich/* (fase 13)
   invalid_immich_url: 'La URL de Immich no es válida (http://… o https://…).',
   invalid_duplicate_strategy: 'Estrategia de duplicados no válida.',
   invalid_transfer_mode: 'Modo de transferencia no válido.',
+  invalid_upload_duplicate_strategy: 'Estrategia de duplicados de subida no válida.',
   immich_not_configured: 'Configura primero la URL y la API key de Immich.',
   immich_unreachable: 'No se pudo contactar con Immich. Revisa la URL.',
   immich_auth_failed: 'Immich rechazó la API key.',

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, OfflineError } from '@/api/client'
-import { UploadAbortError, uploadFile } from '@/api/uploads'
+import { UploadAbortError, uploadFile, UploadSkippedError } from '@/api/uploads'
 
 // XHR de mentira controlable desde el test: la subida por trozos encadena
 // varias requests (POST /session → PUT chunk → POST complete), así que el test
@@ -64,6 +64,7 @@ const RESULT = {
   stored_name: 'foto.jpg',
   size_bytes: 3,
   media_type: 'photo',
+  status: 'stored',
 }
 
 describe('api/uploads (chunked)', () => {
@@ -153,6 +154,27 @@ describe('api/uploads (chunked)', () => {
     expect(error).toBeInstanceOf(ApiError)
     expect((error as ApiError).status).toBe(413)
     expect((error as ApiError).slug).toBe('file_too_large')
+  })
+
+  it('rejects with UploadSkippedError when the session open returns 409 file_exists', async () => {
+    const { promise } = uploadFile(file)
+    await flush()
+    lastXhr().respond(409, JSON.stringify({ detail: 'file_exists' }))
+    await expect(promise).rejects.toBeInstanceOf(UploadSkippedError)
+    // ni un solo trozo viaja: solo se hizo el POST de apertura
+    expect(MockXHR.instances).toHaveLength(1)
+  })
+
+  it('resolves with a skipped result when complete reports the file already existed', async () => {
+    const { promise } = uploadFile(file)
+    await flush()
+    lastXhr().respond(201, JSON.stringify({ upload_id: 'U1', received: 0, total_size: 3 }))
+    await flush()
+    lastXhr().respond(200, JSON.stringify({ received: 3 }))
+    await flush()
+    // carrera: el nombre apareció mientras subían los trozos
+    lastXhr().respond(201, JSON.stringify({ ...RESULT, status: 'skipped' }))
+    await expect(promise).resolves.toEqual([{ ...RESULT, status: 'skipped' }])
   })
 
   it('falls back to the generic slug on an unparseable error body', async () => {

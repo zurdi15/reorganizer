@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// Defaults de usuario para los jobs (estrategia de duplicados y mover/copiar):
-// se persisten al cambiar el segmento, sin botón de guardar. El toast de
+// Ajustes de usuario: duplicados al SUBIR (efecto inmediato en la bandeja) y
+// los defaults de los jobs (duplicados al organizar y mover/copiar). Se
+// persisten al cambiar el segmento, sin botón de guardar. El toast de
 // confirmación va con debounce: dos taps seguidos → un solo aviso.
 import { computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -9,13 +10,19 @@ import RgCard from '@/lib/RgCard.vue'
 import RgSegmented from '@/lib/RgSegmented.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToastStore } from '@/stores/toast'
-import type { DuplicateStrategy, TransferMode } from '@/types/api'
+import type { DuplicateStrategy, TransferMode, UploadDuplicateStrategy } from '@/types/api'
 import { toastApiError } from '@/utils/apiErrors'
 
 const { t } = useI18n()
 const store = useSettingsStore()
 const toast = useToastStore()
 
+// al subir no existe «sobrescribir»: pisar un archivo aún sin organizar sería
+// perder datos en silencio (el backend tampoco lo acepta)
+const uploadDuplicateOptions = computed(() => [
+  { value: 'skip', label: t('settings.general.skip') },
+  { value: 'rename', label: t('settings.general.rename') },
+])
 const duplicateOptions = computed(() => [
   { value: 'rename', label: t('settings.general.rename') },
   { value: 'skip', label: t('settings.general.skip') },
@@ -48,6 +55,12 @@ async function persist(partial: Parameters<typeof store.save>[0]) {
 }
 
 // modelos computados sobre el store: leer del server, escribir persiste
+const uploadDuplicateStrategy = computed({
+  get: () => store.settings?.upload_duplicate_strategy ?? 'skip',
+  set: (value: string) => {
+    void persist({ upload_duplicate_strategy: value as UploadDuplicateStrategy })
+  },
+})
 const duplicateStrategy = computed({
   get: () => store.settings?.default_duplicate_strategy ?? 'rename',
   set: (value: string) => {
@@ -65,6 +78,16 @@ const transferMode = computed({
 <template>
   <RgCard :title="t('settings.general.title')">
     <div class="flex flex-col gap-4">
+      <div class="flex flex-col gap-1.5">
+        <span class="text-sm text-ink-muted">{{ t('settings.general.uploadDuplicates') }}</span>
+        <RgSegmented
+          v-model="uploadDuplicateStrategy"
+          :options="uploadDuplicateOptions"
+          :label="t('settings.general.uploadDuplicates')"
+          data-testid="general-upload-duplicates"
+        />
+        <span class="text-xs text-ink-faint">{{ t('settings.general.uploadDuplicatesHint') }}</span>
+      </div>
       <div class="flex flex-col gap-1.5">
         <span class="text-sm text-ink-muted">{{ t('settings.general.duplicates') }}</span>
         <RgSegmented

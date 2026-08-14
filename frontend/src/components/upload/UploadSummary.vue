@@ -21,17 +21,23 @@ const line = computed(() => {
   if (s.uploading > 0) parts.push(t('upload.summary.uploading', { n: s.uploading }))
   if (s.queued > 0) parts.push(t('upload.summary.queued', { n: s.queued }))
   if (s.done > 0) parts.push(t('upload.summary.done', { n: s.done }))
+  if (s.skipped > 0) parts.push(t('upload.summary.skipped', { n: s.skipped }))
   if (s.error > 0) parts.push(t('upload.summary.errors', { n: s.error }))
   return parts.join(' · ')
 })
 
-// drenado con algo subido: estado de éxito (aunque haya errores al lado —
-// esos conservan su retry)
-const drained = computed(() => !uploads.active && uploads.stats.done > 0)
+// drenado con el lote resuelto: estado de éxito (aunque haya errores al lado —
+// esos conservan su retry). Los saltados cuentan: sus archivos YA están en la
+// bandeja, así que "Organizar ahora" sigue siendo el siguiente paso.
+const drained = computed(
+  () => !uploads.active && uploads.stats.done + uploads.stats.skipped > 0,
+)
 // "Limpiar terminados" SOLO cuenta lo que de verdad barre (completados +
-// cancelados). Los fallidos NO se limpian (se reintentan), así que el botón
-// ni aparece por ellos ni da a entender que los va a tocar.
-const finishedCount = computed(() => uploads.stats.done + uploads.stats.canceled)
+// saltados + cancelados). Los fallidos NO se limpian (se reintentan), así que
+// el botón ni aparece por ellos ni da a entender que los va a tocar.
+const finishedCount = computed(
+  () => uploads.stats.done + uploads.stats.skipped + uploads.stats.canceled,
+)
 </script>
 
 <template>

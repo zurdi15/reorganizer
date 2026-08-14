@@ -68,7 +68,13 @@ export const settings = {
   },
   general: {
     title: 'General',
-    duplicates: 'Duplicados por defecto',
+    // duplicados al SUBIR (nombre ya presente en la bandeja)
+    uploadDuplicates: 'Duplicados al subir',
+    uploadDuplicatesHint:
+      'Si subes un archivo cuyo nombre ya está en la bandeja: saltarlo o guardarlo como «nombre (1)».',
+    // duplicados al ORGANIZAR (destino ya ocupado); es solo el valor por
+    // defecto del job, que se puede cambiar al lanzarlo
+    duplicates: 'Duplicados al organizar',
     rename: 'Renombrar',
     skip: 'Saltar',
     overwrite: 'Sobrescribir',

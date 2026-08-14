@@ -2,6 +2,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
 import { ApiError, OfflineError } from '@/api/client'
+import { UploadSkippedError } from '@/api/uploads'
 import { drainHooks, useUploadsStore, UPLOAD_CONCURRENCY } from '@/stores/uploads'
 import { useToastStore } from '@/stores/toast'
 
@@ -267,6 +268,58 @@ describe('stores/uploads', () => {
     // el done se barre; el error SE QUEDA (es lo que se quiere reintentar)
     expect(store.items.map((i) => i.status)).toEqual(['error'])
     expect(store.items[0].name).toBe('boom.jpg')
+  })
+
+  it('marks the item as skipped (not error) when the server refuses to open the session', async () => {
+    const store = useUploadsStore()
+    store.enqueue([makeFile('a.jpg'), makeFile('b.jpg')])
+    // a.jpg ya estaba en la bandeja; b.jpg sube de verdad
+    mocked.calls[0].reject(new UploadSkippedError())
+    mocked.calls[1].resolve([])
+    await flush()
+
+    expect(store.items.map((i) => i.status)).toEqual(['skipped', 'done'])
+    expect(store.items[0].errorSlug).toBeUndefined()
+    // fuera de `done` (nada se subió) pero contado como resuelto para el badge
+    expect(store.done).toBe(1)
+    expect(store.skipped).toBe(1)
+    expect(store.processed).toBe(2)
+    expect(store.stats.skipped).toBe(1)
+    // el saltado no se puede reintentar: volvería a saltarse
+    store.retry(store.items[0].id)
+    expect(callsFor(store.items[0].file)).toHaveLength(1)
+
+    // un toast por cada cosa: el éxito y el aviso de los ya presentes
+    const toasts = useToastStore().toasts
+    expect(toasts.map((t) => t.kind)).toEqual(['ok', 'info'])
+    expect(toasts[1].message).toContain('ya estaba en la bandeja')
+  })
+
+  it('marks the item as skipped when complete reports the file already existed', async () => {
+    const store = useUploadsStore()
+    store.enqueue([makeFile('a.jpg')])
+    // carrera resuelta en el server: la subida acabó pero no se guardó nada
+    mocked.calls[0].resolve([{ stored_name: 'a.jpg', status: 'skipped' }])
+    await flush()
+
+    expect(store.items[0].status).toBe('skipped')
+    expect(store.done).toBe(0)
+    expect(store.skipped).toBe(1)
+    // nada aterrizó en el input: ni refresh ni toast de éxito
+    expect(refreshSpy).not.toHaveBeenCalled()
+    expect(useToastStore().toasts.map((t) => t.kind)).toEqual(['info'])
+  })
+
+  it('clearFinished() also sweeps skipped items', async () => {
+    const store = useUploadsStore()
+    store.enqueue([makeFile('a.jpg'), makeFile('b.jpg')])
+    mocked.calls[0].reject(new UploadSkippedError())
+    mocked.calls[1].reject(new ApiError(500, 'transfer_failed'))
+    await flush()
+
+    store.clearFinished()
+    expect(store.items.map((i) => i.status)).toEqual(['error'])
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-1')
   })
 
   it('re-pumps the queue when the page returns to foreground (visibilitychange)', async () => {

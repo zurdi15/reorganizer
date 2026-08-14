@@ -10,7 +10,12 @@ from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
-from ..models import DUPLICATE_STRATEGIES, TRANSFER_MODES, AppSetting
+from ..models import (
+    DUPLICATE_STRATEGIES,
+    TRANSFER_MODES,
+    UPLOAD_DUPLICATE_STRATEGIES,
+    AppSetting,
+)
 
 
 class SettingsValidationError(ValueError):
@@ -62,6 +67,9 @@ def _validate(changes: dict[str, Any]) -> None:
     mode = changes.get("default_transfer_mode")
     if mode is not None and mode not in TRANSFER_MODES:
         raise SettingsValidationError("invalid_transfer_mode")
+    upload_strategy = changes.get("upload_duplicate_strategy")
+    if upload_strategy is not None and upload_strategy not in UPLOAD_DUPLICATE_STRATEGIES:
+        raise SettingsValidationError("invalid_upload_duplicate_strategy")
     url = changes.get("immich_url")
     if url:  # cadena vacía = Immich sin configurar, estado válido
         parsed = urlparse(url)
@@ -79,6 +87,10 @@ class AppSettings:
         "immich_library_id": "",
         "default_duplicate_strategy": "rename",
         "default_transfer_mode": "move",
+        # subir dos veces el mismo nombre NO crea `foto (1).jpg` por defecto:
+        # lo normal es re-seleccionar fotos ya subidas desde la galería del
+        # móvil, y renombrarlas duplicaría el archivo en la bandeja
+        "upload_duplicate_strategy": "skip",
     }
 
     @staticmethod

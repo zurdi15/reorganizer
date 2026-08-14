@@ -30,6 +30,15 @@ export class UploadAbortError extends Error {
   }
 }
 
+// El servidor rechazó ABRIR la sesión porque ese nombre ya está en la bandeja
+// y el ajuste de duplicados de subida es `skip` (409 file_exists). No es un
+// fallo: el store marca el item como saltado y no se sube ni un byte.
+export class UploadSkippedError extends Error {
+  constructor() {
+    super('skipped')
+  }
+}
+
 // estado reanudable que el store guarda por item y vuelve a pasar en el retry:
 // si ya hay uploadId, la subida CONTINÚA desde received en vez de reempezar
 export interface ResumeState {
@@ -132,7 +141,13 @@ export function uploadFile(
       filename: file.name,
       total_size: file.size,
     })
-    if (r.status < 200 || r.status >= 300) throw new ApiError(r.status, parseDetail(r.text).slug)
+    if (r.status < 200 || r.status >= 300) {
+      const info = parseDetail(r.text)
+      // el archivo ya está en la bandeja y el ajuste es `skip`: se corta AQUÍ,
+      // antes de mandar ningún trozo (el sentido de la opción con varios GB)
+      if (r.status === 409 && info.slug === 'file_exists') throw new UploadSkippedError()
+      throw new ApiError(r.status, info.slug)
+    }
     const session = JSON.parse(r.text) as { upload_id: string; received: number }
     resume.uploadId = session.upload_id
     resume.received = session.received

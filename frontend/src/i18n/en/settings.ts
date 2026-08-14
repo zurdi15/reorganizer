@@ -65,7 +65,10 @@ export const settings = {
   },
   general: {
     title: 'General',
-    duplicates: 'Default duplicate handling',
+    uploadDuplicates: 'Duplicates when uploading',
+    uploadDuplicatesHint:
+      'When a file you upload is already in the tray by name: skip it, or store it as “name (1)”.',
+    duplicates: 'Duplicates when organizing',
     rename: 'Rename',
     skip: 'Skip',
     overwrite: 'Overwrite',

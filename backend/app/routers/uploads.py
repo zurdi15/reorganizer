@@ -3,15 +3,21 @@
 El cliente XHR manda 1 archivo por request (progreso por archivo), pero la
 API acepta batch (≤50) para curl/scripts. Nota README: detrás de un reverse
 proxy hacen falta `client_max_body_size` y `proxy_request_buffering off`.
+
+Un nombre que ya está en la bandeja se resuelve según el ajuste
+`upload_duplicate_strategy` (skip por defecto, o rename): lo lee el router
+—es un ajuste de DB— y se lo pasa al servicio, que no toca la DB.
 """
 
 import asyncio
 import logging
 from dataclasses import asdict
 
-from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
+from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..db import get_db
 from ..schemas.uploads import (
     ChunkAck,
     UploadResult,
@@ -19,6 +25,7 @@ from ..schemas.uploads import (
     UploadSessionCreate,
 )
 from ..services import uploads as uploads_service
+from ..services.settings import AppSettings, get_setting
 from .input import summary as input_summary
 
 logger = logging.getLogger(__name__)
@@ -28,6 +35,13 @@ router = APIRouter(prefix="/uploads", tags=["uploads"])
 # tope por request multipart: defiende la API abierta de batches absurdos
 MAX_FILES_PER_REQUEST = 50
 
+_STRATEGY_KEY = "upload_duplicate_strategy"
+
+
+def _strategy(db: Session) -> str:
+    """Estrategia de duplicados de SUBIDA vigente (skip|rename)."""
+    return get_setting(db, _STRATEGY_KEY, AppSettings.DEFAULTS[_STRATEGY_KEY])
+
 
 @router.post("", status_code=201, response_model=list[UploadResult])
 async def upload_files(
@@ -35,24 +49,27 @@ async def upload_files(
     # File(None) en vez de File(...): una request sin archivos debe fallar
     # con nuestro slug 422 no_files, no con el error de validación genérico
     files: list[UploadFile] | None = File(None),
+    db: Session = Depends(get_db),
 ) -> list[UploadResult]:
     if not files:
         raise HTTPException(status_code=422, detail="no_files")
     if len(files) > MAX_FILES_PER_REQUEST:
         raise HTTPException(status_code=422, detail="too_many_files")
     settings = get_settings()
+    strategy = _strategy(db)
     results: list[UploadResult] = []
     try:
         for upload in files:
-            stored = await uploads_service.store_upload(upload, settings)
+            stored = await uploads_service.store_upload(upload, settings, strategy)
             results.append(UploadResult(**asdict(stored)))
     except uploads_service.UploadTooLargeError:
         # los archivos ya finalizados del batch se quedan (el input cambió de
         # verdad): se emite el evento igualmente antes de fallar la request
-        if results:
+        if _touched_input(results):
             await _broadcast_input_changed(request)
         raise HTTPException(status_code=413, detail="file_too_large") from None
-    await _broadcast_input_changed(request)
+    if _touched_input(results):
+        await _broadcast_input_changed(request)
     return results
 
 
@@ -60,12 +77,20 @@ async def upload_files(
 
 
 @router.post("/session", status_code=201, response_model=UploadSession)
-def create_session(body: UploadSessionCreate) -> UploadSession:
+def create_session(
+    body: UploadSessionCreate, db: Session = Depends(get_db)
+) -> UploadSession:
     settings = get_settings()
     try:
-        session = uploads_service.create_session(body.filename, body.total_size, settings)
+        session = uploads_service.create_session(
+            body.filename, body.total_size, settings, _strategy(db)
+        )
     except uploads_service.UploadTooLargeError:
         raise HTTPException(status_code=413, detail="file_too_large") from None
+    except uploads_service.DuplicateFilenameError:
+        # 409 con `skip`: el archivo ya está en la bandeja, ni se abre sesión.
+        # No es un fallo — el cliente marca el archivo como saltado.
+        raise HTTPException(status_code=409, detail="file_exists") from None
     return UploadSession(**session)
 
 
@@ -103,23 +128,33 @@ async def put_chunk(
 
 
 @router.post("/session/{upload_id}/complete", status_code=201, response_model=UploadResult)
-async def complete_session(upload_id: str, request: Request) -> UploadResult:
+async def complete_session(
+    upload_id: str, request: Request, db: Session = Depends(get_db)
+) -> UploadResult:
     settings = get_settings()
     try:
-        stored = await uploads_service.complete_session(upload_id, settings)
+        stored = await uploads_service.complete_session(upload_id, settings, _strategy(db))
     except uploads_service.UploadNotFoundError:
         raise HTTPException(status_code=404, detail="upload_not_found") from None
     except uploads_service.UploadIncompleteError as exc:
         raise HTTPException(
             status_code=409, detail={"slug": "upload_incomplete", "received": exc.received}
         ) from None
-    await _broadcast_input_changed(request)
-    return UploadResult(**asdict(stored))
+    result = UploadResult(**asdict(stored))
+    if _touched_input([result]):
+        await _broadcast_input_changed(request)
+    return result
 
 
 @router.delete("/session/{upload_id}", status_code=204)
 def delete_session(upload_id: str) -> None:
     uploads_service.abort_session(upload_id, get_settings())
+
+
+def _touched_input(results: list[UploadResult]) -> bool:
+    """¿Aterrizó algo de verdad? Un lote 100% saltado deja el input igual, así
+    que no merece un input-changed."""
+    return any(result.status == "stored" for result in results)
 
 
 async def _broadcast_input_changed(request: Request) -> None:

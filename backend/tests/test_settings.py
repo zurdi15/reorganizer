@@ -13,6 +13,7 @@ DEFAULTS = {
     "immich_library_id": "",
     "default_duplicate_strategy": "rename",
     "default_transfer_mode": "move",
+    "upload_duplicate_strategy": "skip",
 }
 
 
@@ -69,12 +70,18 @@ def test_put_partial_update_persists(client):
 
 def test_put_defaults_update(client):
     resp = client.put(
-        BASE, json={"default_duplicate_strategy": "skip", "default_transfer_mode": "copy"}
+        BASE,
+        json={
+            "default_duplicate_strategy": "skip",
+            "default_transfer_mode": "copy",
+            "upload_duplicate_strategy": "rename",
+        },
     )
     assert resp.status_code == 200
     body = client.get(BASE).json()
     assert body["default_duplicate_strategy"] == "skip"
     assert body["default_transfer_mode"] == "copy"
+    assert body["upload_duplicate_strategy"] == "rename"
 
 
 # --- masking de la API key ---
@@ -137,6 +144,9 @@ def test_put_masked_key_without_stored_stays_empty(client):
     [
         ({"default_duplicate_strategy": "banana"}, "invalid_duplicate_strategy"),
         ({"default_transfer_mode": "teleport"}, "invalid_transfer_mode"),
+        ({"upload_duplicate_strategy": "banana"}, "invalid_upload_duplicate_strategy"),
+        # `overwrite` es válido al organizar, pero NO al subir
+        ({"upload_duplicate_strategy": "overwrite"}, "invalid_upload_duplicate_strategy"),
         ({"immich_url": "ftp://immich.local"}, "invalid_immich_url"),
         ({"immich_url": "no-es-una-url"}, "invalid_immich_url"),
         ({"immich_url": "http://"}, "invalid_immich_url"),

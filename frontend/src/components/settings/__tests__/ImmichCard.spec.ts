@@ -15,6 +15,7 @@ const SETTINGS: Settings = {
   immich_library_id: '',
   default_duplicate_strategy: 'rename',
   default_transfer_mode: 'move',
+  upload_duplicate_strategy: 'skip',
 }
 
 const LIBRARIES = [

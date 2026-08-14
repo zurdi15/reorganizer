@@ -25,6 +25,9 @@ estructura en disco.
   suben por partes; un corte de red o el móvil pasando a segundo plano no tira
   la subida — se reanuda desde el último trozo confirmado. Los trozos pequeños
   esquivan límites de tamaño del reverse proxy/ingress.
+- 🔁 **Sin duplicados al subir**: si el archivo ya está en la bandeja por
+  nombre, se salta (por defecto) en vez de guardarlo como `foto (1).jpg` — y
+  ni se suben sus bytes. Configurable en Ajustes (saltar / renombrar).
 - 🗂️ **Ruta destino libre**: `2025/08/croacia`, `2025/diario`, lo que quieras.
   El EXIF sugiere año/mes del lote; tú compones la ruta con autocompletado del
   árbol existente. Nunca se fuerza una estructura.
@@ -78,8 +81,9 @@ carpetas. Alternativa pure-non-root: `user: "1000:1000"` en compose (entonces
 | `RG_SERVE_STATIC` | `true` | Servir la SPA (desactivar solo en dev) |
 | `PUID` / `PGID` | `1000` | Dueño efectivo del proceso (solo Docker) |
 
-La configuración de Immich y los defaults de duplicados/transferencia viven en
-la base de datos y se editan desde **Ajustes** en la propia app.
+La configuración de Immich, los duplicados al subir y los defaults de
+duplicados/transferencia al organizar viven en la base de datos y se editan
+desde **Ajustes** en la propia app.
 
 ## Immich
 

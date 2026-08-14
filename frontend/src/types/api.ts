@@ -5,6 +5,9 @@ export type MediaKind = 'photo' | 'video' | 'unknown'
 export type Orientation = 'horizontal' | 'vertical' | null
 export type TransferMode = 'move' | 'copy'
 export type DuplicateStrategy = 'rename' | 'skip' | 'overwrite'
+// duplicados al SUBIR (nombre ya presente en la bandeja). Sin `overwrite`:
+// una subida nunca pisa un archivo que aún no se ha organizado
+export type UploadDuplicateStrategy = 'skip' | 'rename'
 
 // ---- Input ----
 
@@ -60,9 +63,13 @@ export interface InputProbe {
 
 export interface UploadResult {
   original_name: string
+  // con `skipped`, el nombre del archivo que YA estaba en la bandeja
   stored_name: string
   size_bytes: number
   media_type: MediaKind
+  // stored = aterrizó en el input; skipped = ese nombre ya existía y el
+  // ajuste upload_duplicate_strategy es `skip` (no se escribió nada)
+  status: 'stored' | 'skipped'
 }
 
 // ---- Output ----
@@ -183,6 +190,7 @@ export interface Settings {
   immich_library_id: string
   default_duplicate_strategy: DuplicateStrategy
   default_transfer_mode: TransferMode
+  upload_duplicate_strategy: UploadDuplicateStrategy
 }
 
 // ---- WebSocket (push-only; único mensaje entrante {"action":"sync"}) ----

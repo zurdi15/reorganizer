@@ -62,6 +62,11 @@ const errorText = computed(() => {
         <span v-if="item.status === 'canceled'" class="text-ink-faint" data-testid="item-canceled">
           {{ t('upload.queue.canceled') }}
         </span>
+        <!-- saltado: no se subió porque ese nombre ya estaba en la bandeja
+             (ajuste de duplicados de subida) — informativo, no un error -->
+        <span v-else-if="item.status === 'skipped'" class="text-ink-faint" data-testid="item-skipped">
+          {{ t('upload.queue.skipped') }}
+        </span>
       </div>
       <RgProgress
         v-if="item.status === 'uploading'"
@@ -86,6 +91,14 @@ const errorText = computed(() => {
         name="check"
         class="text-ok"
         data-testid="status-done"
+      />
+      <!-- el saltado también está resuelto: mismo check, pero apagado — no
+           es una subida celebrable ni un fallo -->
+      <RgIcon
+        v-else-if="item.status === 'skipped'"
+        name="check"
+        class="text-ink-faint"
+        data-testid="status-skipped"
       />
       <RgIcon
         v-else-if="item.status === 'error'"

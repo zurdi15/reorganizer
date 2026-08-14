@@ -27,6 +27,10 @@ JOB_STATUSES = (
 ITEM_STATUSES = ("planned", "done", "skipped", "duplicate", "error", "cancelled", "missing")
 TRANSFER_MODES = ("move", "copy")
 DUPLICATE_STRATEGIES = ("rename", "skip", "overwrite")
+# qué hacer cuando la subida trae un nombre que YA está en input_dir. No hay
+# `overwrite`: una subida jamás debe pisar un archivo que aún no se ha
+# organizado (sería una pérdida silenciosa de datos)
+UPLOAD_DUPLICATE_STRATEGIES = ("skip", "rename")
 MEDIA_TYPES = ("photo", "video", "unknown")
 ORIENTATIONS = ("horizontal", "vertical")
 

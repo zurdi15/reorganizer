@@ -40,6 +40,12 @@ class UploadNotFoundError(Exception):
     """La sesión de subida por trozos no existe (404 upload_not_found)."""
 
 
+class DuplicateFilenameError(Exception):
+    """Con estrategia `skip`, ya hay un archivo con ese nombre en input_dir
+    (el router lo mapea a 409 file_exists al ABRIR la sesión, para no subir
+    los bytes de algo que se va a descartar)."""
+
+
 class ChunkOutOfOrderError(Exception):
     """El offset del trozo deja un hueco respecto a lo ya recibido (409).
 
@@ -60,18 +66,28 @@ class UploadIncompleteError(Exception):
         super().__init__(f"received={received}")
 
 
+# estrategia por defecto de los servicios cuando el caller no pasa ninguna:
+# la conservadora (nunca descarta bytes). La efectiva la resuelve el router
+# leyendo `upload_duplicate_strategy` de ajustes.
+DEFAULT_STRATEGY = "rename"
+
+
 @dataclass(frozen=True)
 class StoredUpload:
-    """Resultado de una subida ya finalizada en input_dir."""
+    """Resultado de una subida ya resuelta contra input_dir."""
 
     # nombre tal cual lo mandó el cliente (informativo; el frontend lo
     # renderiza siempre como nodo de texto, nunca HTML)
     original_name: str
-    # nombre final en input_dir (saneado y des-colisionado)
+    # nombre final en input_dir (saneado y des-colisionado). Con status
+    # `skipped` es el del archivo que YA estaba allí
     stored_name: str
     size_bytes: int
     # photo|video|unknown por extensión (thumbs.kind_for)
     media_type: str
+    # stored = aterrizó en input_dir; skipped = ya había un archivo con ese
+    # nombre y la estrategia es `skip` (los bytes subidos se descartan)
+    status: str = "stored"
 
 
 def clean_stale_parts(settings: Settings) -> None:
@@ -121,12 +137,27 @@ def _load_meta(settings: Settings, upload_id: str) -> tuple[Path, dict]:
     return part, json.loads(meta.read_text())
 
 
-def create_session(filename: str, total_size: int, settings: Settings) -> dict:
+def create_session(
+    filename: str,
+    total_size: int,
+    settings: Settings,
+    strategy: str = DEFAULT_STRATEGY,
+) -> dict:
     """Abre una sesión de subida por trozos y devuelve {upload_id, received,
-    total_size}. 413 si total_size supera el límite."""
+    total_size}. 413 si total_size supera el límite.
+
+    Con `skip`, un nombre que YA está en input corta aquí
+    (DuplicateFilenameError → 409): así el cliente no gasta la red subiendo
+    varios GB que se iban a descartar al finalizar. La comprobación se repite
+    en complete_session — esta es solo el atajo barato.
+    """
     max_bytes = settings.max_upload_mb * 1024 * 1024
     if total_size < 0 or total_size > max_bytes:
         raise UploadTooLargeError(filename)
+    # se compara el nombre YA saneado: es el que aterrizaría en la bandeja
+    existing = settings.input_dir / sanitize_filename(filename or "")
+    if strategy == "skip" and existing.exists():
+        raise DuplicateFilenameError(filename)
     settings.upload_tmp_dir.mkdir(parents=True, exist_ok=True)
     upload_id = uuid.uuid4().hex
     part, meta = _session_paths(settings, upload_id)
@@ -173,9 +204,17 @@ async def append_chunk(
     return written
 
 
-async def complete_session(upload_id: str, settings: Settings) -> StoredUpload:
+async def complete_session(
+    upload_id: str, settings: Settings, strategy: str = DEFAULT_STRATEGY
+) -> StoredUpload:
     """Finaliza: valida received == total, sanea el nombre, resuelve colisión
-    bajo lock y os.replace atómico a input_dir. Borra el .meta."""
+    bajo lock y os.replace atómico a input_dir. Borra el .meta.
+
+    Con `skip` y el nombre ya presente (p. ej. otra subida ganó la carrera
+    mientras esta iba por sus trozos) el .part se descarta y el resultado sale
+    con status `skipped` — este es el punto de enforcement real; el 409 de
+    create_session solo evita el viaje de los bytes.
+    """
     part, data = _load_meta(settings, upload_id)
     received = part.stat().st_size
     total_size = data["total_size"]
@@ -183,10 +222,14 @@ async def complete_session(upload_id: str, settings: Settings) -> StoredUpload:
         raise UploadIncompleteError(received)
     clean = sanitize_filename(data["original_name"] or "")
     async with _finalize_lock:
-        final = _next_free_path(settings.input_dir, clean)
-        os.replace(part, final)  # atómico: mismo filesystem
+        final = _resolve_destination(settings.input_dir, clean, strategy)
+        if final is not None:
+            os.replace(part, final)  # atómico: mismo filesystem
     _, meta = _session_paths(settings, upload_id)
     meta.unlink(missing_ok=True)
+    if final is None:
+        part.unlink(missing_ok=True)  # los bytes subidos se descartan
+        return _skipped_result(data["original_name"] or "", settings.input_dir / clean)
     logger.info(
         "subida completada: %s (%.1f MB) → input", final.name, received / 1024 / 1024
     )
@@ -209,14 +252,18 @@ def abort_session(upload_id: str, settings: Settings) -> None:
     meta.unlink(missing_ok=True)
 
 
-async def store_upload(upload: UploadFile, settings: Settings) -> StoredUpload:
+async def store_upload(
+    upload: UploadFile, settings: Settings, strategy: str = DEFAULT_STRATEGY
+) -> StoredUpload:
     """Streamea `upload` a `<uuid>.part` y lo finaliza en input_dir.
 
     Límite max_upload_mb enforzado A MITAD de stream (un cliente hostil no
     llena el disco antes del 413); cualquier fallo — límite, desconexión del
     cliente, short read — deja cero `.part` huérfanos (finally). El nombre
-    final sale de sanitize_filename + resolución de colisiones `stem (n).ext`
-    bajo lock, y aterriza con os.replace atómico (mismo filesystem).
+    final sale de sanitize_filename + resolución de colisiones bajo lock
+    (`stem (n).ext` con `rename`; con `skip` se descarta el archivo y el
+    resultado sale con status `skipped`), y aterriza con os.replace atómico
+    (mismo filesystem).
     """
     tmp_dir = settings.upload_tmp_dir
     # parents=True crea también input_dir si faltara (el tmp cuelga de él)
@@ -234,20 +281,56 @@ async def store_upload(upload: UploadFile, settings: Settings) -> StoredUpload:
                 await out.write(chunk)
         clean = sanitize_filename(upload.filename or "")
         async with _finalize_lock:
-            final = _next_free_path(settings.input_dir, clean)
-            # atómico: .part y destino comparten filesystem (config.upload_tmp_dir)
-            os.replace(part, final)
+            final = _resolve_destination(settings.input_dir, clean, strategy)
+            if final is not None:
+                # atómico: .part y destino comparten filesystem (config.upload_tmp_dir)
+                os.replace(part, final)
     finally:
         # tras un os.replace exitoso el .part ya no existe y esto es un no-op;
-        # en cualquier fallo (límite, desconexión…) borra el parcial
+        # en cualquier fallo (límite, desconexión…) — y en un skip — borra el parcial
         part.unlink(missing_ok=True)
 
+    if final is None:
+        return _skipped_result(upload.filename or "", settings.input_dir / clean)
     logger.info("subida completada: %s (%.1f MB) → input", final.name, size / 1024 / 1024)
     return StoredUpload(
         original_name=upload.filename or final.name,
         stored_name=final.name,
         size_bytes=size,
         media_type=kind_for(final),
+    )
+
+
+def _resolve_destination(directory: Path, name: str, strategy: str) -> Path | None:
+    """Destino final del archivo, o None si hay que SALTÁRSELO.
+
+    `skip` + nombre ya presente → None (el caller descarta los bytes);
+    `rename` → primer hueco libre `stem (n).ext`. Debe llamarse con
+    _finalize_lock cogido (ver _next_free_path).
+    """
+    candidate = directory / name
+    if not candidate.exists():
+        return candidate
+    if strategy == "skip":
+        return None
+    return _next_free_path(directory, name)
+
+
+def _skipped_result(original_name: str, existing: Path) -> StoredUpload:
+    """StoredUpload de un archivo NO subido: describe el que ya estaba en
+    input (su tamaño es el del archivo presente, no el de los bytes que se
+    acaban de descartar)."""
+    try:
+        size = existing.stat().st_size
+    except OSError:  # borrado entre la comprobación y el stat: no es fatal
+        size = 0
+    logger.info("subida saltada: %s ya existe en input", existing.name)
+    return StoredUpload(
+        original_name=original_name or existing.name,
+        stored_name=existing.name,
+        size_bytes=size,
+        media_type=kind_for(existing),
+        status="skipped",
     )
 
 

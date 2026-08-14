@@ -11,6 +11,9 @@ class SettingsRead(BaseModel):
     immich_library_id: str
     default_duplicate_strategy: str
     default_transfer_mode: str
+    # qué hacer al subir un archivo cuyo nombre ya está en la bandeja:
+    # skip (default) | rename
+    upload_duplicate_strategy: str
 
 
 class SettingsUpdate(BaseModel):
@@ -24,6 +27,7 @@ class SettingsUpdate(BaseModel):
     immich_library_id: str | None = None
     default_duplicate_strategy: str | None = None
     default_transfer_mode: str | None = None
+    upload_duplicate_strategy: str | None = None
 
 
 class ImmichTestRequest(BaseModel):

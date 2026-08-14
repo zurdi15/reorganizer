@@ -14,6 +14,13 @@ def post_files(client, *specs):
     return client.post("/api/v1/uploads", files=files)
 
 
+def set_upload_strategy(client, value):
+    """Ajusta `upload_duplicate_strategy` (el default de la app es `skip`)."""
+    resp = client.put("/api/v1/settings", json={"upload_duplicate_strategy": value})
+    assert resp.status_code == 200
+    return resp
+
+
 class FakeWS:
     """Cliente WS mínimo (el router ws real llega en la oleada 3)."""
 
@@ -37,6 +44,7 @@ def test_single_upload_lands_in_input_sanitized(client):
             "stored_name": "Foto Playa.jpg",
             "size_bytes": 9,
             "media_type": "photo",
+            "status": "stored",
         }
     ]
     settings = get_settings()
@@ -79,12 +87,48 @@ def test_batch_of_three_and_media_type_classification(client):
 
 
 def test_collision_appends_counter(client):
+    set_upload_strategy(client, "rename")
     for expected in ("photo.jpg", "photo (1).jpg", "photo (2).jpg"):
         resp = post_files(client, ("photo.jpg", b"data", "image/jpeg"))
         assert resp.status_code == 201
         assert resp.json()[0]["stored_name"] == expected
+        assert resp.json()[0]["status"] == "stored"
     stored = sorted(p.name for p in get_settings().input_dir.iterdir() if p.is_file())
     assert stored == ["photo (1).jpg", "photo (2).jpg", "photo.jpg"]
+
+
+def test_collision_skipped_by_default(client):
+    # `skip` es el default: re-subir el mismo nombre NO crea "photo (1).jpg"
+    first = post_files(client, ("photo.jpg", b"original", "image/jpeg"))
+    assert first.json()[0]["status"] == "stored"
+
+    resp = post_files(client, ("photo.jpg", b"otra cosa distinta", "image/jpeg"))
+    assert resp.status_code == 201
+    assert resp.json() == [
+        {
+            "original_name": "photo.jpg",
+            "stored_name": "photo.jpg",
+            # tamaño del archivo que YA estaba (los bytes subidos se descartan)
+            "size_bytes": 8,
+            "media_type": "photo",
+            "status": "skipped",
+        }
+    ]
+    input_dir = get_settings().input_dir
+    # ni copia renombrada ni contenido pisado, y cero .part huérfanos
+    assert [p.name for p in input_dir.iterdir() if p.is_file()] == ["photo.jpg"]
+    assert (input_dir / "photo.jpg").read_bytes() == b"original"
+    assert list(get_settings().upload_tmp_dir.glob("*.part")) == []
+
+
+def test_skipped_batch_does_not_broadcast_input_changed(app, client):
+    post_files(client, ("photo.jpg", b"original", "image/jpeg"))
+    fake = FakeWS()
+    app.state.broadcaster.add(fake)
+    # el lote entero se salta: el input no cambió, así que no se emite nada
+    resp = post_files(client, ("photo.jpg", b"otra", "image/jpeg"))
+    assert resp.json()[0]["status"] == "skipped"
+    assert fake.sent == []
 
 
 async def test_parallel_same_name_uploads_do_not_clobber(media_dirs):
@@ -93,7 +137,9 @@ async def test_parallel_same_name_uploads_do_not_clobber(media_dirs):
     def mk(i: int) -> UploadFile:
         return UploadFile(BytesIO(f"contenido-{i}".encode()), filename="photo.jpg")
 
-    results = await asyncio.gather(*(store_upload(mk(i), settings) for i in range(5)))
+    results = await asyncio.gather(
+        *(store_upload(mk(i), settings, "rename") for i in range(5))
+    )
     names = [r.stored_name for r in results]
     # todos distintos: nadie pisó a nadie
     assert len(set(names)) == 5
@@ -289,6 +335,7 @@ def test_complete_incomplete_returns_received(client):
 
 
 def test_chunk_collision_and_delete(client):
+    set_upload_strategy(client, "rename")
     (get_settings().input_dir / "a.bin").write_bytes(b"previo")
     uid = client.post(CHUNK, json={"filename": "a.bin", "total_size": 3}).json()["upload_id"]
     _put_chunk(client, uid, 0, b"new")
@@ -298,3 +345,47 @@ def test_chunk_collision_and_delete(client):
     uid2 = client.post(CHUNK, json={"filename": "b.bin", "total_size": 3}).json()["upload_id"]
     assert client.delete(f"{CHUNK}/{uid2}").status_code == 204
     assert client.get(f"{CHUNK}/{uid2}").status_code == 404
+
+
+# ── skip de duplicados en la subida por trozos ───────────────────────────────
+
+
+def test_chunk_session_rejected_when_name_exists(client):
+    """Con `skip` (default) el 409 llega al ABRIR la sesión: los GB no viajan."""
+    (get_settings().input_dir / "a.bin").write_bytes(b"previo")
+    resp = client.post(CHUNK, json={"filename": "a.bin", "total_size": 3})
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "file_exists"
+    # ni sesión ni .part: no se ha reservado nada
+    assert list(get_settings().upload_tmp_dir.glob("*.part")) == []
+    assert (get_settings().input_dir / "a.bin").read_bytes() == b"previo"
+
+
+def test_chunk_session_skip_uses_the_sanitized_name(client):
+    # el nombre se compara ya saneado: "  a.bin " aterrizaría como "a.bin"
+    (get_settings().input_dir / "a.bin").write_bytes(b"previo")
+    resp = client.post(CHUNK, json={"filename": "  a.bin ", "total_size": 3})
+    assert resp.status_code == 409
+
+
+def test_chunk_complete_skips_when_the_name_appears_mid_upload(client, app):
+    """El enforcement REAL está en complete: si el nombre aparece mientras
+    la subida iba por sus trozos, los bytes se descartan."""
+    session = client.post(CHUNK, json={"filename": "a.bin", "total_size": 3})
+    uid = session.json()["upload_id"]
+    _put_chunk(client, uid, 0, b"new")
+    # otra subida (u otro proceso) gana la carrera
+    (get_settings().input_dir / "a.bin").write_bytes(b"previo")
+
+    fake = FakeWS()
+    app.state.broadcaster.add(fake)
+    done = client.post(f"{CHUNK}/{uid}/complete")
+    assert done.status_code == 201
+    assert done.json()["status"] == "skipped"
+    assert done.json()["stored_name"] == "a.bin"
+    assert (get_settings().input_dir / "a.bin").read_bytes() == b"previo"
+    # la sesión se limpia entera (nada de .part de varios GB colgando) y el
+    # input no cambió, así que tampoco se emite input-changed
+    tmp = get_settings().upload_tmp_dir
+    assert list(tmp.glob("*.part")) == list(tmp.glob("*.meta")) == []
+    assert fake.sent == []
