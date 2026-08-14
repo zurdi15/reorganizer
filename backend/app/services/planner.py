@@ -79,6 +79,7 @@ async def _plan(
     total = len(files)
     job.total = total
     session.commit()
+    logger.info("job %s: planificando %d archivos → %s", job.id, total, job.dest_path)
 
     # el motor filtra enabled/prioridad por sí mismo
     rules = list(session.scalars(select(Rule)))
@@ -141,6 +142,7 @@ async def _plan(
 
     job.status = "planned"
     session.commit()
+    logger.info("job %s: plan listo (%d items)", job.id, job.total)
     await broadcaster.broadcast(_status_event(job))
 
 

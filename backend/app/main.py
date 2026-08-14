@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -26,8 +27,25 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 API_PREFIX = "/api/v1"
 
 
+def _configure_logging(level: str) -> None:
+    """Hace que los logs de la app (paquete `app`) salgan junto a los access de
+    uvicorn: sin esto, uvicorn no configura el root y los logger.info del
+    backend se descartan (solo se verían WARNING+). Handler propio → no depende
+    del root ni duplica."""
+    app_logger = logging.getLogger("app")
+    app_logger.setLevel(level.upper())
+    if not app_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        app_logger.addHandler(handler)
+    app_logger.propagate = False
+
+
 def create_app(engine: Engine | None = None) -> FastAPI:
     settings = get_settings()
+    _configure_logging(settings.log_level)
     if engine is None:
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         engine = make_engine(settings.db_url)

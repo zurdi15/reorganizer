@@ -215,6 +215,10 @@ class JobRunner:
                 .order_by(JobItem.id)
             )
         )
+        logger.info(
+            "job %s: ejecutando %d items (%s, duplicados=%s)",
+            job.id, len(items), job.transfer_mode, job.duplicate_strategy,
+        )
         # destinos ya escritos por ESTE job: nunca sobrescribir un archivo que
         # el propio job acaba de producir (dos fuentes con el mismo nombre)
         produced: set[Path] = set()
@@ -231,12 +235,17 @@ class JobRunner:
         job.status = "completed" if job.errors == 0 else "completed_with_errors"
         job.finished_at = utcnow()
         session.commit()
+        logger.info(
+            "job %s: %s (%d movidos/copiados, %d errores, %d saltados)",
+            job.id, job.status, job.done, job.errors, job.skipped,
+        )
         await self.broadcaster.broadcast(_status_event(job))
 
         # rescan de Immich (soft-fail: trigger_scan jamás lanza) + aviso de
         # que el input cambió, con contadores frescos
         job.immich_status = await immich.trigger_scan(session)
         session.commit()
+        logger.info("job %s: rescan de Immich → %s", job.id, job.immich_status)
         await self.broadcaster.broadcast(
             {"type": "immich", "data": {"job_id": job.id, "status": job.immich_status}}
         )

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10240
     # timeout de ffprobe/ffmpeg por archivo (metadata y thumbnails de vídeo)
     ffprobe_timeout_s: int = 20
+    # nivel de log de la app (además de los access de uvicorn): INFO muestra lo
+    # que HACE el backend (jobs, subidas, Immich); DEBUG añade el detalle fino
+    log_level: str = "INFO"
 
     @property
     def db_path(self) -> Path:

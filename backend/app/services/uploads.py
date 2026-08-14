@@ -187,6 +187,9 @@ async def complete_session(upload_id: str, settings: Settings) -> StoredUpload:
         os.replace(part, final)  # atómico: mismo filesystem
     _, meta = _session_paths(settings, upload_id)
     meta.unlink(missing_ok=True)
+    logger.info(
+        "subida completada: %s (%.1f MB) → input", final.name, received / 1024 / 1024
+    )
     return StoredUpload(
         original_name=data["original_name"] or final.name,
         stored_name=final.name,
@@ -239,6 +242,7 @@ async def store_upload(upload: UploadFile, settings: Settings) -> StoredUpload:
         # en cualquier fallo (límite, desconexión…) borra el parcial
         part.unlink(missing_ok=True)
 
+    logger.info("subida completada: %s (%.1f MB) → input", final.name, size / 1024 / 1024)
     return StoredUpload(
         original_name=upload.filename or final.name,
         stored_name=final.name,
