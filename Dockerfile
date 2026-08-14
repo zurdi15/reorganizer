@@ -8,6 +8,10 @@ RUN apk add --no-cache bash
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
+# versión mostrada en Ajustes: el workflow de release pasa APP_VERSION desde el
+# tag; en un build suelto queda "dev". Vite inlinea las VITE_* del entorno.
+ARG APP_VERSION=dev
+ENV VITE_APP_VERSION=$APP_VERSION
 RUN npm run build
 
 # Stage 2: runtime

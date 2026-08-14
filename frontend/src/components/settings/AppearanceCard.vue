@@ -2,7 +2,8 @@
 // Apariencia: tema (oscuro/claro/sistema) e idioma (es/en). Preferencias
 // LOCALES al dispositivo (localStorage vía utils/theme + i18n/applyLocale),
 // sin backend — cada miembro de la casa ve la app a su gusto. Pie con la
-// versión de la app, leída de package.json en build (sin hex ni magia).
+// versión de la app: el workflow de release la inyecta desde el tag en
+// VITE_APP_VERSION; en dev cae al version de package.json.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -14,6 +15,9 @@ import { setTheme } from '@/utils/theme'
 import { getThemeMode, type ThemeMode } from '@/utils/uiPrefs'
 
 const { t, locale } = useI18n()
+
+// versión mostrada: la del tag (inyectada en el build) o package.json en dev
+const appVersion = import.meta.env.VITE_APP_VERSION || pkg.version
 
 const themeOptions = computed(() => [
   { value: 'dark', label: t('settings.appearance.dark') },
@@ -64,7 +68,7 @@ const languageModel = computed({
         />
       </div>
       <p class="rg-metric text-center text-xs text-ink-faint" data-testid="app-version">
-        {{ t('settings.appearance.version', { version: pkg.version }) }}
+        {{ t('settings.appearance.version', { version: appVersion }) }}
       </p>
     </div>
   </RgCard>

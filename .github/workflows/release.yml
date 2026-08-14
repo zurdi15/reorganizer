@@ -32,5 +32,8 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          # inyecta la versión del tag (2.1.0) en el build → Ajustes la muestra
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
