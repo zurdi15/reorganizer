@@ -14,6 +14,10 @@ import type { InputDates, InputFile, InputSummary } from '@/types/api'
 // puede tener miles de archivos — jamás se traen todos de golpe.
 const PAGE_SIZE = 200
 
+// throttle del relistado disparado por WS input-changed: subir muchos ficheros
+// emite un input-changed por cada uno; sin esto serían cientos de refetch
+const REFRESH_THROTTLE_MS = 1500
+
 // Estado del folder de entrada: listado PAGINADO + contadores + sugerencias
 // EXIF. La verdad vive en el server (LAN, sin capa offline): refresh() recarga
 // la página 1 y los contadores/fechas a la vez y deduplica llamadas en vuelo —
@@ -98,16 +102,31 @@ export const useInputStore = defineStore('input', () => {
   }
 
   // evento WS input-changed (fin de uploads y de jobs): los counts llegan en
-  // el propio mensaje — se aplican al instante (la banda/badges reaccionan
-  // ya) y el listado se recarga a la PÁGINA 1 deduplicado detrás (el folder
-  // cambió: no basta con parchear en local)
+  // el propio mensaje — se aplican al INSTANTE (banda/badges reaccionan ya). El
+  // relistado a la página 1 va THROTTLED: input-changed se emite por CADA
+  // archivo subido, y subir 500 no debe disparar 500 refetch. Se refresca al
+  // instante en el primero y como mucho cada REFRESH_THROTTLE_MS, con una ronda
+  // final para reflejar el estado ya asentado.
+  let lastRefresh = 0
+  let trailing: ReturnType<typeof setTimeout> | null = null
+
+  function throttledRefresh() {
+    const since = Date.now() - lastRefresh
+    if (since >= REFRESH_THROTTLE_MS) {
+      lastRefresh = Date.now()
+      void refresh().catch(() => {})
+    } else if (!trailing) {
+      trailing = setTimeout(() => {
+        trailing = null
+        lastRefresh = Date.now()
+        void refresh().catch(() => {})
+      }, REFRESH_THROTTLE_MS - since)
+    }
+  }
+
   function applyInputChanged(counts: InputSummary) {
     summary.value = counts
-    void refresh().catch(() => {
-      // el refresh de fondo no tiene vista que lo espere: un fallo aquí no
-      // debe ser una promesa rechazada sin dueño — el usuario sigue viendo
-      // los counts del mensaje y el próximo refresh manual lo reintenta
-    })
+    throttledRefresh()
   }
 
   // ---- sugerencias EXIF para el path builder (chips de oleada 4) ----

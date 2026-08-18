@@ -72,6 +72,17 @@ function kindFor(file: File): UploadKind {
   return 'other'
 }
 
+// cede el hilo entre tandas del enqueue: rAF si existe (se alinea con el paint),
+// si no un timeout 0 (tests/entornos sin rAF)
+function scheduleIdle(fn: () => void): void {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => fn())
+  else setTimeout(fn, 0)
+}
+
+// throttle del progreso: xhr.upload.onprogress dispara decenas de veces por
+// segundo; una barra no necesita más de ~12 fps, y así se recorta la reactividad
+const PROGRESS_MIN_MS = 80
+
 function slugFor(error: unknown): string {
   if (error instanceof OfflineError) return 'offline'
   if (error instanceof ApiError) return error.slug
@@ -139,27 +150,40 @@ export const useUploadsStore = defineStore('uploads', () => {
     item.objectUrl = undefined
   }
 
-  // fuente única (picker, drag&drop, y en v1.1 Web Share Target): File[]
+  // fuente única (picker, drag&drop, y en v1.1 Web Share Target): File[].
+  // Empuja por TANDAS cediendo el hilo entre ellas: seleccionar cientos/miles
+  // de ficheros ya no congela la UI (el freeze de "se queda pillado" al elegir
+  // en el móvil). El total del lote se cuenta de una para que el slab lo
+  // muestre completo desde el primer instante.
   function enqueue(files: File[] | FileList) {
     const list = Array.from(files)
     if (list.length === 0) return
     beginBatchIfDrained()
-    for (const file of list) {
-      const item: UploadItem = {
-        id: nextId++,
-        file,
-        name: file.name,
-        size: file.size,
-        kind: kindFor(file),
-        status: 'queued',
-        progress: 0,
-        batch: batchSeq,
+    total.value += list.length
+    let i = 0
+    const CHUNK = 50
+
+    function pushChunk() {
+      const end = Math.min(i + CHUNK, list.length)
+      for (; i < end; i++) {
+        const file = list[i]
+        const item: UploadItem = {
+          id: nextId++,
+          file,
+          name: file.name,
+          size: file.size,
+          kind: kindFor(file),
+          status: 'queued',
+          progress: 0,
+          batch: batchSeq,
+        }
+        if (item.kind === 'image') item.objectUrl = URL.createObjectURL(file)
+        items.value.push(item)
       }
-      if (item.kind === 'image') item.objectUrl = URL.createObjectURL(file)
-      total.value++
-      items.value.push(item)
+      pump() // arranca subidas en cuanto hay items (no espera a toda la tanda)
+      if (i < list.length) scheduleIdle(pushChunk)
     }
-    pump()
+    pushChunk()
   }
 
   // arranca subidas hasta llenar la concurrencia — idempotente: se llama en
@@ -185,9 +209,15 @@ export const useUploadsStore = defineStore('uploads', () => {
   function start(item: UploadItem) {
     item.status = 'uploading'
     // no se resetea progress: en un retry se reanuda desde el % ya subido
+    let lastTs = 0
     const { promise, abort } = uploadFile(item.file, {
       resume: resumeFor(item.id),
       onProgress: (fraction) => {
+        // throttle: aplica como mucho ~12 veces/seg, pero SIEMPRE el 1 final
+        // (que la barra llegue a tope) para no dejarla congelada a medias
+        const now = Date.now()
+        if (fraction < 1 && now - lastTs < PROGRESS_MIN_MS) return
+        lastTs = now
         item.progress = fraction
       },
     })

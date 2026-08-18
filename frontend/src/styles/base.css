@@ -71,6 +71,22 @@ html.rg-light {
   overscroll-behavior: contain;
 }
 
+/* content-visibility: el navegador SALTA el layout/paint de lo que está fuera
+   de pantalla en listas largas (cola de subidas, grid del input) — el gran
+   ahorro de render al scrollear cientos de elementos. contain-intrinsic-size
+   con `auto` recuerda el tamaño ya medido; el segundo valor es la estimación
+   inicial para que la barra de scroll no salte antes del primer render. */
+.rg-cv-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
+.rg-cv-card {
+  content-visibility: auto;
+  /* tarjeta cuadrada de la grid: alto ≈ ancho de columna; `auto` lo afina tras
+     el primer render, la estimación evita saltos iniciales */
+  contain-intrinsic-size: auto 160px;
+}
+
 body {
   font-family: var(--rg-font-body);
   color: var(--rg-ink);

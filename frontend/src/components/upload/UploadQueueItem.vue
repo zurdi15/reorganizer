@@ -31,7 +31,7 @@ const errorText = computed(() => {
 </script>
 
 <template>
-  <li class="flex items-center gap-3 py-2" :data-status="item.status">
+  <li class="rg-cv-row flex items-center gap-3 py-2" :data-status="item.status">
     <!-- miniatura 56px: imagen real solo si hay objectURL (kind image) -->
     <div
       class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-line bg-stone"
@@ -40,6 +40,8 @@ const errorText = computed(() => {
         v-if="item.objectUrl"
         :src="item.objectUrl"
         alt=""
+        loading="lazy"
+        decoding="async"
         class="h-full w-full object-cover"
         data-testid="item-thumb"
       />

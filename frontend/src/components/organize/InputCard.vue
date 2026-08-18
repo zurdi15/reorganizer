@@ -47,7 +47,7 @@ const label = computed(() => `${props.file.name} · ${t(`organize.kinds.${props.
 <template>
   <button
     type="button"
-    class="rg-press relative aspect-square w-full overflow-hidden rounded-sm border border-line bg-stone"
+    class="rg-cv-card rg-press relative aspect-square w-full overflow-hidden rounded-sm border border-line bg-stone"
     :aria-label="label"
     data-testid="input-card"
     @click="emit('open')"
