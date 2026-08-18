@@ -8,15 +8,13 @@ import { useI18n } from 'vue-i18n'
 import UploadDropzone from '@/components/upload/UploadDropzone.vue'
 import UploadQueueItem from '@/components/upload/UploadQueueItem.vue'
 import UploadSummary from '@/components/upload/UploadSummary.vue'
-import { useWakeLock } from '@/composables/useWakeLock'
 import { useUploadsStore } from '@/stores/uploads'
 
 const { t } = useI18n()
 const uploads = useUploadsStore()
 
-// pantalla encendida mientras el lote sube (mejora progresiva; el watch del
-// composable la libera solo al drenar la cola)
-useWakeLock(computed(() => uploads.active))
+// el wake lock (pantalla encendida durante las subidas) vive AHORA en App.vue,
+// global: así sigue activo aunque navegues fuera de esta vista mientras sube
 
 const hasItems = computed(() => uploads.items.length > 0)
 </script>
