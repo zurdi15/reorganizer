@@ -18,6 +18,7 @@ import { useOrganizeStore } from '@/stores/organize'
 import type { JobItem } from '@/types/api'
 import { groupPlanItems, isUnknownDest } from '@/utils/planGroups'
 
+import PlanActionBar from './PlanActionBar.vue'
 import PlanGroup from './PlanGroup.vue'
 import RunConfirmSheet from './RunConfirmSheet.vue'
 
@@ -166,24 +167,17 @@ const confirmOpen = ref(false)
         </p>
 
         <PlanGroup v-for="group in groups" :key="group.subfolder" :group="group" />
-
-        <!-- footer: volver a componer / abrir la confirmación -->
-        <div class="flex gap-2 pt-1">
-          <RgButton variant="ghost" data-testid="plan-back" @click="organize.backToCompose()">
-            {{ t('organize.plan.back') }}
-          </RgButton>
-          <RgButton
-            class="flex-1"
-            :disabled="organize.planItems.length === 0"
-            data-testid="plan-organize"
-            @click="confirmOpen = true"
-          >
-            {{ t('organize.plan.organizeCta') }}
-          </RgButton>
-        </div>
       </template>
     </div>
 
     <RunConfirmSheet :open="confirmOpen" @close="confirmOpen = false" />
   </RgCard>
+
+  <!-- volver / ejecutar: fuera de la tarjeta y pegados abajo, para que
+       desplegar un aviso con cientos de archivos no los entierre -->
+  <PlanActionBar
+    v-if="!planning && !organize.planItemsLoading"
+    :count="organize.planItems.length"
+    @organize="confirmOpen = true"
+  />
 </template>

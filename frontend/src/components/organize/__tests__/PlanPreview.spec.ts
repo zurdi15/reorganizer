@@ -151,6 +151,26 @@ describe('PlanPreview', () => {
     )
   })
 
+  // los botones viven en una barra FIJA fuera de la tarjeta: desplegar un
+  // aviso con cientos de archivos ya no los entierra al final del scroll
+  it('the sticky bar carries the actions and the count of what will run', async () => {
+    const { wrapper } = await mountPreview()
+
+    expect(wrapper.get('[data-testid="plan-bar-count"]').text()).toBe('4 archivos')
+    const bar = wrapper.get('[data-testid="plan-bar-count"]').element.closest('footer')
+    // volver y organizar están DENTRO de la barra, no en la tarjeta
+    expect(bar?.querySelector('[data-testid="plan-back"]')).not.toBeNull()
+    expect(bar?.querySelector('[data-testid="plan-organize"]')).not.toBeNull()
+  })
+
+  it('no sticky bar while the dry-run is still planning', async () => {
+    const { wrapper } = await mountPreview(makeJob({ status: 'planning' }))
+
+    expect(wrapper.find('[data-testid="plan-planning"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="plan-bar-count"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="plan-organize"]').exists()).toBe(false)
+  })
+
   it('footer: Volver returns to compose without losing segments; Organizar… opens the confirm sheet', async () => {
     const { wrapper, organize } = await mountPreview()
 

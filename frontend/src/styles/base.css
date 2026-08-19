@@ -103,6 +103,22 @@ body {
   background: var(--rg-bg-void);
 }
 
+/* pie de acción pegajoso (resumen de Subir, barra de compose, barra del plan):
+   la acción principal SIEMPRE a un dedo por larga que se ponga la lista de
+   arriba. En móvil se pega POR ENCIMA de la barra inferior fija (~4rem + el
+   safe-area del notch); en ≥sm el nav vive arriba y el pie puede pegarse al
+   borde real del scrollport. sticky contra el <main> del shell, que es el
+   único scroller de la app. */
+.rg-sticky-bar {
+  position: sticky;
+  bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 640px) {
+  .rg-sticky-bar {
+    bottom: 0;
+  }
+}
+
 /* losa tallada: borde fino y brillo interior superior, sin sombras blandas.
    La clase nombra el ACABADO (losa), no el nivel de elevación — las
    superficies base van en stone; el token slab es el nivel realzado para

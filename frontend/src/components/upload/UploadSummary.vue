@@ -41,7 +41,7 @@ const finishedCount = computed(
 </script>
 
 <template>
-  <footer class="upload-summary rg-chrome-bg z-10 -mx-4 border-t border-line px-4 py-3">
+  <footer class="rg-sticky-bar rg-chrome-bg z-10 -mx-4 border-t border-line px-4 py-3">
     <p v-if="line" class="rg-metric text-sm text-ink-muted" data-testid="summary-line">
       {{ line }}
     </p>
@@ -90,18 +90,3 @@ const finishedCount = computed(
     </div>
   </footer>
 </template>
-
-<style scoped>
-/* pegado POR ENCIMA del bottom nav móvil (fijo, ~4rem de alto + safe-area);
-   en ≥sm el nav vive arriba y el pie puede pegarse al borde real del
-   scrollport. sticky contra el <main> del shell (único scroller). */
-.upload-summary {
-  position: sticky;
-  bottom: calc(4rem + env(safe-area-inset-bottom));
-}
-@media (min-width: 640px) {
-  .upload-summary {
-    bottom: 0;
-  }
-}
-</style>

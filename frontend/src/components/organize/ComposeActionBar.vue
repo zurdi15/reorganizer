@@ -6,8 +6,8 @@
 // destino vive arriba del todo y su CTA aquí, pegado abajo: llegue donde
 // llegue el usuario en la grid, la acción sigue a un dedo de distancia.
 //
-// Misma disciplina que el pie de Subir (UploadSummary): sticky POR ENCIMA de
-// la barra inferior móvil, chrome translúcido y respeto al safe-area.
+// El pegado lo pone .rg-sticky-bar (base.css), compartido con el pie de Subir
+// y con la barra de la etapa plan.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -30,7 +30,7 @@ const disabled = computed(
 </script>
 
 <template>
-  <footer class="compose-bar rg-chrome-bg z-10 -mx-4 border-t border-line px-4 py-3">
+  <footer class="rg-sticky-bar rg-chrome-bg z-10 -mx-4 border-t border-line px-4 py-3">
     <div class="flex items-center gap-3">
       <!-- la ruta elegida SIEMPRE visible; tocarla sube al compositor (que
            puede haber quedado muy arriba tras scrollear la grid) -->
@@ -64,18 +64,3 @@ const disabled = computed(
     </div>
   </footer>
 </template>
-
-<style scoped>
-/* pegada POR ENCIMA del bottom nav móvil (fijo, ~4rem + safe-area); en ≥sm el
-   nav vive arriba y el pie se pega al borde real del scrollport. sticky contra
-   el <main> del shell (único scroller de la app). */
-.compose-bar {
-  position: sticky;
-  bottom: calc(4rem + env(safe-area-inset-bottom));
-}
-@media (min-width: 640px) {
-  .compose-bar {
-    bottom: 0;
-  }
-}
-</style>
