@@ -124,6 +124,54 @@ describe('OrganizeView', () => {
     expect((wrapper.get('[data-testid="organize-preview-cta"]').element as HTMLButtonElement).disabled).toBe(true)
   })
 
+  // El problema que resuelve este orden: con miles de archivos sin organizar,
+  // la grid crece sin fin (scroll infinito) y todo lo que estuviera debajo
+  // quedaba a un scroll interminable, cargando páginas por el camino.
+  it('compose: puts the destination card ABOVE the input grid', async () => {
+    const { wrapper } = await mountView()
+
+    const html = wrapper.html()
+    const destAt = html.indexOf('data-testid="dest-chips"')
+    const gridAt = html.indexOf('data-testid="input-count"')
+    expect(destAt).toBeGreaterThan(-1)
+    expect(gridAt).toBeGreaterThan(-1)
+    expect(destAt).toBeLessThan(gridAt)
+  })
+
+  it('compose: the sticky bar shows the chosen path and jumps back to the builder', async () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    const { wrapper, organize } = await mountView()
+
+    // sin destino: pista en vez de ruta, y el CTA no se puede pulsar
+    expect(wrapper.get('[data-testid="compose-bar-empty"]').text()).toBe('Elige un destino')
+    expect(wrapper.find('[data-testid="compose-bar-path"]').exists()).toBe(false)
+
+    organize.setFromPath('2024/08/croacia')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="compose-bar-path"]').text()).toBe('2024/08/croacia/')
+
+    // tocar la ruta trae el compositor a pantalla (puede haber quedado muy
+    // arriba tras scrollear la grid)
+    await wrapper.get('[data-testid="compose-bar-dest"]').trigger('click')
+    expect(scrollIntoView).toHaveBeenCalledWith(
+      expect.objectContaining({ behavior: 'smooth' }),
+    )
+  })
+
+  it('the sticky bar belongs to compose only', async () => {
+    const { wrapper, organize } = await mountView()
+    expect(wrapper.find('[data-testid="compose-bar-dest"]').exists()).toBe(true)
+
+    organize.setFromPath('2024')
+    await flushPromises()
+    await wrapper.get('[data-testid="organize-preview-cta"]').trigger('click')
+    await flushPromises()
+
+    expect(organize.stage).toBe('plan')
+    expect(wrapper.find('[data-testid="compose-bar-dest"]').exists()).toBe(false)
+  })
+
   it('lands straight on the right stage when a job is already live on entry (state-sync)', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)

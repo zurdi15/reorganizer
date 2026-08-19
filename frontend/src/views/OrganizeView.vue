@@ -4,17 +4,17 @@
 // Todo el peso vive en los componentes y el store; si hay un job vivo al
 // entrar (state-sync), el store lo adopta solo y esta vista aterriza directa
 // en la etapa correcta.
-import { onMounted } from 'vue'
+import { onMounted, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
+import ComposeActionBar from '@/components/organize/ComposeActionBar.vue'
 import DestinationBuilder from '@/components/organize/DestinationBuilder.vue'
 import InputGrid from '@/components/organize/InputGrid.vue'
 import JobProgressPanel from '@/components/organize/JobProgressPanel.vue'
 import PlanPreview from '@/components/organize/PlanPreview.vue'
 import SuggestionChips from '@/components/organize/SuggestionChips.vue'
 import RgBadge from '@/lib/RgBadge.vue'
-import RgButton from '@/lib/RgButton.vue'
 import RgCard from '@/lib/RgCard.vue'
 import { useInputStore } from '@/stores/input'
 import { useOrganizeStore } from '@/stores/organize'
@@ -25,6 +25,14 @@ const route = useRoute()
 const router = useRouter()
 const input = useInputStore()
 const organize = useOrganizeStore()
+
+// el compositor de destino, para poder traerlo a pantalla desde la barra fija
+// (con la grid cargada de páginas puede haber quedado muy arriba)
+const destCard = useTemplateRef<HTMLElement>('destCard')
+
+function scrollToDest() {
+  destCard.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 onMounted(() => {
   input.refresh().catch(toastApiError)
@@ -56,29 +64,24 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- etapa compose: revisar el lote + componer el destino -->
+    <!-- etapa compose: componer el destino (ARRIBA: es la acción) y revisar
+         el lote debajo (contexto). El orden es deliberado — con miles de
+         archivos la grid crece sin fin con el scroll infinito, y cualquier
+         cosa colocada tras ella queda inalcanzable en la práctica. -->
     <template v-if="organize.stage === 'compose'">
+      <div ref="destCard">
+        <RgCard :title="t('organize.builder.title')">
+          <div class="flex flex-col gap-3">
+            <DestinationBuilder />
+            <SuggestionChips />
+          </div>
+        </RgCard>
+      </div>
+
       <InputGrid />
 
-      <RgCard :title="t('organize.builder.title')">
-        <div class="flex flex-col gap-3">
-          <DestinationBuilder />
-          <SuggestionChips />
-        </div>
-      </RgCard>
-
-      <!-- el CTA exige lote no vacío Y al menos un segmento (dest_path nunca
-           puede ir vacío al backend) -->
-      <RgButton
-        size="lg"
-        block
-        :loading="organize.creating"
-        :disabled="input.files.length === 0 || organize.destSegments.length === 0"
-        data-testid="organize-preview-cta"
-        @click="organize.createPlan()"
-      >
-        {{ t('organize.previewCta') }}
-      </RgButton>
+      <!-- CTA siempre a mano, pegado abajo, con la ruta elegida a la vista -->
+      <ComposeActionBar @edit="scrollToDest" />
     </template>
 
     <!-- etapa plan: preview del dry-run (incluye la RunConfirmSheet) -->

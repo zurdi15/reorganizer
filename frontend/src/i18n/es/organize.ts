@@ -60,6 +60,12 @@ export const organize = {
     willCreate: 'se creará',
     open: 'Abrir {name}',
   },
+  // barra fija de la etapa compose (la ruta elegida + el CTA, siempre a mano
+  // por muy larga que se ponga la grid del input)
+  bar: {
+    noDest: 'Elige un destino',
+    edit: 'Editar el destino',
+  },
   previewCta: 'Previsualizar',
   // etapa plan: dry-run + preview agrupada
   plan: {
