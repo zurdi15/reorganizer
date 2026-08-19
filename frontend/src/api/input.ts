@@ -39,6 +39,14 @@ export function deleteInputFile(path: string): Promise<void> {
 // cacheado en el server): la grid móvil jamás descarga originales, y para la
 // preview grande de la sheet 512px también sobra. El original (thumb=0)
 // no tiene consumidor en la UI de esta fase, así que ni se ofrece.
-export function inputThumbUrl(path: string): string {
-  return `/api/v1/input/preview?path=${encodeURIComponent(path)}&thumb=1`
+//
+// `version` (el mtime del archivo, que ya viaja en InputFile) hace de cache
+// buster: con él la respuesta se marca inmutable y el navegador NO vuelve a
+// pedir la miniatura al re-scrollear la grid — con miles de archivos eso son
+// miles de revalidaciones 304 que desaparecen. Si el archivo cambia, cambia
+// su mtime y con él la URL. Sin `version` el server solo cachea un ratito
+// (no puede saber si la miniatura de esa ruta sigue siendo la buena).
+export function inputThumbUrl(path: string, version?: number | string): string {
+  const base = `/api/v1/input/preview?path=${encodeURIComponent(path)}&thumb=1`
+  return version === undefined ? base : `${base}&v=${encodeURIComponent(String(version))}`
 }

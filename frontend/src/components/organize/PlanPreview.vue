@@ -15,6 +15,7 @@ import RgProgress from '@/lib/RgProgress.vue'
 import RgSpinner from '@/lib/RgSpinner.vue'
 import { useJobsStore } from '@/stores/jobs'
 import { useOrganizeStore } from '@/stores/organize'
+import type { JobItem } from '@/types/api'
 import { groupPlanItems, isUnknownDest } from '@/utils/planGroups'
 
 import PlanGroup from './PlanGroup.vue'
@@ -29,20 +30,28 @@ const planning = computed(() => job.value?.status === 'planning')
 
 const destPath = computed(() => job.value?.dest_path ?? organize.destPath)
 
-const unknownItems = computed(() =>
-  organize.planItems.filter((item) => isUnknownDest(item, destPath.value)),
-)
-const collisionItems = computed(() => organize.planItems.filter((item) => item.collision === true))
-
-// los sin-regla ya tienen su aviso fijado con lista propia: fuera de los
+// UNA pasada sobre los items del plan (hasta 2000). Antes eran tres filtros
+// independientes más el barrido de groupPlanItems, con isUnknownDest —que
+// trocea strings— recalculado dos veces por archivo.
+// Los sin-regla ya tienen su aviso fijado con lista propia: fuera de los
 // grupos normales (las colisiones sí se quedan en el suyo — la anotación no
-// cambia dónde acaba el archivo)
-const groups = computed(() =>
-  groupPlanItems(
-    organize.planItems.filter((item) => !isUnknownDest(item, destPath.value)),
-    destPath.value,
-  ),
-)
+// cambia dónde acaba el archivo).
+const partition = computed(() => {
+  const dest = destPath.value
+  const unknown: JobItem[] = []
+  const collisions: JobItem[] = []
+  const classified: JobItem[] = []
+  for (const item of organize.planItems) {
+    if (item.collision === true) collisions.push(item)
+    if (isUnknownDest(item, dest)) unknown.push(item)
+    else classified.push(item)
+  }
+  return { unknown, collisions, groups: groupPlanItems(classified, dest) }
+})
+
+const unknownItems = computed(() => partition.value.unknown)
+const collisionItems = computed(() => partition.value.collisions)
+const groups = computed(() => partition.value.groups)
 
 const strategyLabel = computed(() => {
   const key = {

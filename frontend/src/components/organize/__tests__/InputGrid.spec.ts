@@ -95,8 +95,11 @@ describe('InputGrid', () => {
     const thumbs = wrapper.findAll('[data-testid="input-card-thumb"]')
     expect(thumbs).toHaveLength(2)
     expect(thumbs[0].attributes('loading')).toBe('lazy')
-    // ruta con subcarpeta y espacio: encodeURIComponent + thumb=1 SIEMPRE
-    expect(thumbs[0].attributes('src')).toBe('/api/v1/input/preview?path=sub%2Fa%20b.jpg&thumb=1')
+    // ruta con subcarpeta y espacio: encodeURIComponent + thumb=1 SIEMPRE, y
+    // el mtime como versión (deja cachear la miniatura para siempre)
+    expect(thumbs[0].attributes('src')).toBe(
+      '/api/v1/input/preview?path=sub%2Fa%20b.jpg&thumb=1&v=1785535200',
+    )
     expect(thumbs[1].attributes('src')).toContain('&thumb=1')
 
     expect(wrapper.get('[data-testid="input-count"]').text()).toBe('3 archivos')
@@ -117,8 +120,11 @@ describe('InputGrid', () => {
     expect(wrapper.find('[data-testid="input-grid"]').exists()).toBe(false)
     const action = wrapper.get('[data-testid="input-empty-upload"]')
     await action.trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.name).toBe('upload')
+    // /upload es una ruta con carga perezosa: la navegación no termina hasta
+    // que su chunk resuelve (por eso waitFor y no un solo flush)
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.name).toBe('upload')
+    })
   })
 
   it('the refresh button re-requests the three input reads', async () => {

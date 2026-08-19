@@ -171,8 +171,22 @@ async def probe(path: str = Query(...), db: Session = Depends(get_db)) -> InputP
     )
 
 
+# cache de miniaturas en el navegador. Con `v` (el mtime que el cliente ya
+# tiene del listado) la URL es única por versión del archivo → inmutable y un
+# año: re-scrollear la grid deja de pedir NADA. Sin `v` no se puede prometer
+# eso (la misma ruta puede tener otro contenido), así que solo un minuto —
+# suficiente para que el scroll no revalide, y el ETag de FileResponse cubre
+# el resto.
+_THUMB_CACHE_VERSIONED = "private, max-age=31536000, immutable"
+_THUMB_CACHE_PLAIN = "private, max-age=60"
+
+
 @router.get("/preview")
-async def preview(path: str = Query(...), thumb: bool = Query(False)) -> FileResponse:
+async def preview(
+    path: str = Query(...),
+    thumb: bool = Query(False),
+    v: str | None = Query(None),
+) -> FileResponse:
     settings = get_settings()
     target = resolve_under(settings.input_dir, path)
     if not target.is_file():
@@ -184,7 +198,13 @@ async def preview(path: str = Query(...), thumb: bool = Query(False)) -> FileRes
             cached = await thumbs.get_thumb(target)
         except thumbs.ThumbUnavailableError:
             raise HTTPException(status_code=404, detail="thumb_unavailable") from None
-        return FileResponse(cached, media_type="image/jpeg")
+        return FileResponse(
+            cached,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": _THUMB_CACHE_VERSIONED if v else _THUMB_CACHE_PLAIN
+            },
+        )
     # el FileResponse de Starlette moderno responde Range (scrub de vídeo);
     # verificado en tests/test_input_api.py::test_preview_supports_range.
     # nosniff + Content-Disposition attachment: un .html/.svg subido jamás se

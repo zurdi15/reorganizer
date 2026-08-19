@@ -54,9 +54,10 @@ const label = computed(() => `${props.file.name} · ${t(`organize.kinds.${props.
   >
     <img
       v-if="showThumb"
-      :src="inputThumbUrl(file.path)"
+      :src="inputThumbUrl(file.path, file.mtime)"
       :alt="''"
       loading="lazy"
+      decoding="async"
       class="h-full w-full object-cover"
       data-testid="input-card-thumb"
       @error="thumbFailed = true"

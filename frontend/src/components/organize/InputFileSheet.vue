@@ -107,9 +107,10 @@ async function confirmDelete() {
       <!-- preview grande: también thumb=1 (JPEG 512px) — nunca originales -->
       <img
         v-if="showPreview"
-        :src="inputThumbUrl(file.path)"
+        :src="inputThumbUrl(file.path, file.mtime)"
         :alt="file.name"
         loading="lazy"
+        decoding="async"
         class="max-h-[45dvh] w-full rounded-sm border border-line bg-void object-contain"
         data-testid="sheet-preview"
         @error="previewFailed = true"

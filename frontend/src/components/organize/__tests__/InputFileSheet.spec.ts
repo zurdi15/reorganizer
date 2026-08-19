@@ -82,7 +82,9 @@ describe('InputFileSheet', () => {
     expect(panel.textContent).toContain('Drones → video/horizontal/dron/mini3')
     // preview grande: también thumb=1, nunca el original
     const preview = q('[data-testid="sheet-preview"]') as HTMLImageElement
-    expect(preview.getAttribute('src')).toBe('/api/v1/input/preview?path=sub%2FDJI_0042.MP4&thumb=1')
+    expect(preview.getAttribute('src')).toBe(
+      '/api/v1/input/preview?path=sub%2FDJI_0042.MP4&thumb=1&v=1785535200',
+    )
     expect(preview.getAttribute('loading')).toBe('lazy')
   })
 

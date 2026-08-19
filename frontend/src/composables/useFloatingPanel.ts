@@ -47,6 +47,19 @@ export function useFloatingPanel() {
     computePosition(measured || FALLBACK_HEIGHT_PX)
   }
 
+  // versión para listeners de scroll/resize: como mucho UNA por frame. Sin
+  // esto, cada evento de scroll medía (getBoundingClientRect) y escribía
+  // estilos — layout forzado a la cadencia del dedo mientras hay un panel
+  // abierto.
+  let frame = 0
+  function scheduleRecompute() {
+    if (frame) return
+    frame = requestAnimationFrame(() => {
+      frame = 0
+      if (open.value) recomputePosition()
+    })
+  }
+
   function onKeydown(event: KeyboardEvent) {
     if (event.key !== 'Escape') return
     if (!isTopLayer(id)) return
@@ -75,11 +88,13 @@ export function useFloatingPanel() {
     pushLayer(id)
     window.addEventListener('keydown', onKeydown)
     window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('resize', recomputePosition)
+    window.addEventListener('resize', scheduleRecompute, { passive: true })
     // capture: los eventos scroll NO burbujean; en fase de captura llegan
     // también los de cualquier ancestro scrolleable (el <main> del shell,
-    // sheets), así el panel sigue anclado a su trigger al hacer scroll
-    window.addEventListener('scroll', recomputePosition, true)
+    // sheets), así el panel sigue anclado a su trigger al hacer scroll.
+    // passive: el handler nunca hace preventDefault, y así no entra en la
+    // ruta crítica del scroll
+    window.addEventListener('scroll', scheduleRecompute, { capture: true, passive: true })
     // el panel real recién se monta tras este tick (v-if acaba de latir):
     // recalcular con su alto MEDIDO corrige un flip que el de reserva
     // hubiera decidido mal
@@ -95,8 +110,12 @@ export function useFloatingPanel() {
     popLayer(id)
     window.removeEventListener('keydown', onKeydown)
     window.removeEventListener('pointerdown', onPointerDown)
-    window.removeEventListener('resize', recomputePosition)
-    window.removeEventListener('scroll', recomputePosition, true)
+    window.removeEventListener('resize', scheduleRecompute)
+    window.removeEventListener('scroll', scheduleRecompute, true)
+    if (frame) {
+      cancelAnimationFrame(frame)
+      frame = 0
+    }
   }
 
   onBeforeUnmount(closePanel)

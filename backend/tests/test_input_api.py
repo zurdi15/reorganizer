@@ -142,6 +142,26 @@ def test_preview_guards(client):
     assert client.get("/api/v1/input/preview", params={"path": "no-existe.jpg"}).json()["detail"] == "file_not_found"
 
 
+def test_thumb_cache_headers(client):
+    """La grid pide miles de miniaturas: con `v` (el mtime que ya tiene del
+    listado) la respuesta es inmutable y el navegador deja de revalidarlas."""
+    root = get_settings().input_dir
+    make_jpeg(root / "foto.jpg")
+    params = {"path": "foto.jpg", "thumb": 1}
+
+    versioned = client.get("/api/v1/input/preview", params={**params, "v": "1755212345.5"})
+    assert versioned.status_code == 200
+    assert versioned.headers["cache-control"] == "private, max-age=31536000, immutable"
+
+    # sin versión no se puede prometer inmutabilidad (misma ruta, otro contenido)
+    plain = client.get("/api/v1/input/preview", params=params)
+    assert plain.headers["cache-control"] == "private, max-age=60"
+
+    # el original NUNCA se marca cacheable (puede cambiar bajo la misma ruta)
+    original = client.get("/api/v1/input/preview", params={"path": "foto.jpg"})
+    assert "cache-control" not in original.headers
+
+
 def test_preview_symlink_escape_rejected(client):
     root = get_settings().input_dir
     secret = root.parent / "secreto.txt"

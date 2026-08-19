@@ -18,6 +18,13 @@ const PAGE_SIZE = 200
 // emite un input-changed por cada uno; sin esto serían cientos de refetch
 const REFRESH_THROTTLE_MS = 1500
 
+// techo de lo que un refresh vuelve a pedir. refresh() CONSERVA las páginas
+// ya cargadas (si volviera siempre a la página 1, un input-changed a mitad de
+// scroll — y durante una subida llega cada 1,5 s — tiraría al usuario al
+// principio de la grid), pero sin llegar a pedir un folder de 20.000 de golpe:
+// a partir de aquí el scroll infinito recupera el resto.
+const REFRESH_MAX = 1000
+
 // Estado del folder de entrada: listado PAGINADO + contadores + sugerencias
 // EXIF. La verdad vive en el server (LAN, sin capa offline): refresh() recarga
 // la página 1 y los contadores/fechas a la vez y deduplica llamadas en vuelo —
@@ -53,13 +60,17 @@ export const useInputStore = defineStore('input', () => {
     // encadenado arranca una petición nueva (y no hay bucle: solo un eslabón).
     if (inflight) return inflight.catch(() => {}).then(() => refresh())
     loading.value = true
+    // tantos archivos como hubiera cargados (mínimo una página, máximo
+    // REFRESH_MAX): el usuario scrolleado no pierde su sitio al refrescar
+    const keep = Math.min(Math.max(PAGE_SIZE, files.value.length), REFRESH_MAX)
     inflight = Promise.all([
-      fetchInputFiles({ limit: PAGE_SIZE, offset: 0 }),
+      fetchInputFiles({ limit: keep, offset: 0 }),
       fetchInputSummary(),
       fetchInputDates(),
     ])
       .then(([page, nextSummary, nextDates]) => {
-        // reset a la página 1: se REEMPLAZA lo acumulado, no se apila
+        // se REEMPLAZA lo acumulado (no se apila), pero con tantos archivos
+        // como había: la posición de scroll sobrevive al refresco
         files.value = page.files
         total.value = page.total
         summary.value = nextSummary
@@ -82,7 +93,9 @@ export const useInputStore = defineStore('input', () => {
     loadingMore.value = true
     try {
       const page = await fetchInputFiles({ limit: PAGE_SIZE, offset: files.value.length })
-      files.value = [...files.value, ...page.files]
+      // push, no copia: copiar el array entero por página multiplica la basura
+      // que recoge el GC según crece la grid
+      files.value.push(...page.files)
       total.value = page.total
     } finally {
       loadingMore.value = false

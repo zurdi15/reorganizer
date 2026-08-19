@@ -322,17 +322,70 @@ describe('stores/uploads', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-1')
   })
 
-  it('re-pumps the queue when the page returns to foreground (visibilitychange)', async () => {
+  // Los contadores del resumen se MANTIENEN en cada transición (antes se
+  // derivaban recorriendo la lista entera en cada archivo terminado, que era
+  // el coste cuadrático del lote). Este test es el que garantiza que ninguna
+  // transición se salte la contabilidad.
+  it('keeps the status counters exact across a whole batch', async () => {
+    const store = useUploadsStore()
+    store.enqueue(Array.from({ length: 12 }, (_, i) => makeFile(`f${i}.jpg`)))
+    expect(store.stats.queued).toBe(12 - UPLOAD_CONCURRENCY)
+    expect(store.stats.uploading).toBe(UPLOAD_CONCURRENCY)
+
+    // se van resolviendo/fallando por tandas: el pump rellena huecos solo
+    for (let settled = 0; settled < 12; settled++) {
+      const call = mocked.calls[settled]
+      if (settled % 4 === 3) call.reject(new ApiError(500, 'transfer_failed'))
+      else call.resolve([])
+      await flush()
+    }
+
+    expect(store.stats).toMatchObject({ queued: 0, uploading: 0, done: 9, error: 3 })
+    expect(store.items.every((i) => i.status !== 'queued')).toBe(true)
+    expect(store.active).toBe(false)
+    expect(store.done).toBe(9)
+  })
+
+  it('keeps the counters exact through cancelPending() and clearFinished()', async () => {
+    const store = useUploadsStore()
+    store.enqueue(Array.from({ length: 6 }, (_, i) => makeFile(`f${i}.jpg`)))
+    mocked.calls[0].resolve([])
+    await flush()
+
+    // 1 done, 2 uploading (el pump rellenó), 3 en cola
+    expect(store.stats).toMatchObject({ done: 1, uploading: 2, queued: 3 })
+    store.cancelPending()
+    expect(store.stats.queued).toBe(0)
+    expect(store.items).toHaveLength(3)
+    expect(store.total).toBe(3)
+
+    store.clearFinished()
+    expect(store.stats).toMatchObject({ done: 0, uploading: 2, queued: 0 })
+    expect(store.items).toHaveLength(2)
+
+    // y la cola sigue viva: al terminar lo que quedaba en vuelo, drena
+    mocked.calls.at(-1)!.resolve([])
+    mocked.calls.at(-2)!.resolve([])
+    await flush()
+    expect(store.active).toBe(false)
+    expect(store.stats.uploading).toBe(0)
+  })
+
+  it('revives offline-failed items and re-pumps when the page returns to foreground', async () => {
     const store = useUploadsStore()
     const file = makeFile('a.jpg')
     store.enqueue([file])
-    mocked.calls.at(-1)!.resolve([])
+    // iOS suspende el XHR en background: la promesa se rechaza como red caída
+    mocked.calls.at(-1)!.reject(new OfflineError())
     await flush()
+    expect(store.items[0].status).toBe('error')
+    expect(store.stats.error).toBe(1)
 
-    // simula la vuelta de background: el item quedó repuesto a queued
-    store.items[0].status = 'queued'
     document.dispatchEvent(new Event('visibilitychange'))
     expect(callsFor(file)).toHaveLength(2)
     expect(store.items[0].status).toBe('uploading')
+    // los contadores acompañan la resurrección (el resumen no miente)
+    expect(store.stats.error).toBe(0)
+    expect(store.stats.uploading).toBe(1)
   })
 })

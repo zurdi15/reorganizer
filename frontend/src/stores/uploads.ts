@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 
 import { ApiError, OfflineError } from '@/api/client'
 import {
@@ -72,10 +72,12 @@ function kindFor(file: File): UploadKind {
   return 'other'
 }
 
-// cede el hilo entre tandas del enqueue: rAF si existe (se alinea con el paint),
-// si no un timeout 0 (tests/entornos sin rAF)
+// cede el hilo entre tandas del enqueue. requestIdleCallback CON TECHO: cede
+// de verdad cuando el hilo está ocupado pero garantiza avance en 100 ms. rAF
+// no vale aquí — en segundo plano NO dispara, y el usuario que cambia de app
+// a mitad de elegir 2000 fotos se encontraba el encolado congelado al volver.
 function scheduleIdle(fn: () => void): void {
-  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => fn())
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(() => fn(), { timeout: 100 })
   else setTimeout(fn, 0)
 }
 
@@ -104,6 +106,32 @@ export const useUploadsStore = defineStore('uploads', () => {
   const total = ref(0)
   const skipped = ref(0)
   const processed = computed(() => done.value + skipped.value)
+
+  // Contadores por estado para el resumen ("3 subiendo · 12 en cola · …"),
+  // MANTENIDOS en cada transición en vez de derivados con un barrido. Antes
+  // eran un computed O(n) que se invalidaba en cada archivo terminado, y
+  // junto con pump()+checkDrain() hacían TRES recorridos completos por
+  // settle: 2000 archivos = ~9 s de hilo principal (coste cuadrático). Ahora
+  // cada archivo que termina cuesta O(1).
+  const stats = reactive({ queued: 0, uploading: 0, done: 0, error: 0, canceled: 0, skipped: 0 })
+
+  // índice del primer item que PUEDE seguir en cola. Invariante: nada por
+  // delante de `cursor` está `queued`, así que pump() reanuda el barrido
+  // desde aquí en vez de empezar de cero cada vez. Se rebobina cuando algo
+  // vuelve a la cola y se ajusta cuando se borra un item por delante.
+  let cursor = 0
+
+  // TODA transición de estado pasa por aquí: es lo que mantiene honestos los
+  // contadores (y con ellos el resumen, el drenado y el badge del nav)
+  function setStatus(item: UploadItem, next: UploadStatus) {
+    if (item.status === next) return
+    stats[item.status]--
+    stats[next]++
+    item.status = next
+    // un item revivido puede estar DETRÁS del cursor (retry de algo viejo):
+    // rebobinar es O(1) y el siguiente pump ya lo encuentra
+    if (next === 'queued') cursor = 0
+  }
 
   // abort() de las subidas en vuelo, por id — funciones fuera del estado
   // reactivo (no son datos, no deben proxificarse ni serializarse)
@@ -178,6 +206,7 @@ export const useUploadsStore = defineStore('uploads', () => {
           batch: batchSeq,
         }
         if (item.kind === 'image') item.objectUrl = URL.createObjectURL(file)
+        stats.queued++ // nace en cola (aún no está en la lista: sin setStatus)
         items.value.push(item)
       }
       pump() // arranca subidas en cuanto hay items (no espera a toda la tanda)
@@ -187,19 +216,19 @@ export const useUploadsStore = defineStore('uploads', () => {
   }
 
   // arranca subidas hasta llenar la concurrencia — idempotente: se llama en
-  // cada settle y al volver a foreground (visibilitychange)
+  // cada settle y al volver a foreground (visibilitychange). El en-vuelo sale
+  // del contador y el siguiente candidato del cursor: cero recorridos de la
+  // lista (start() marca `uploading`, así que el índice avanza a la vuelta).
   function pump() {
-    let inFlight = items.value.filter((i) => i.status === 'uploading').length
-    for (const item of items.value) {
-      if (inFlight >= UPLOAD_CONCURRENCY) break
-      if (item.status !== 'queued') continue
-      start(item)
-      inFlight++
+    while (stats.uploading < UPLOAD_CONCURRENCY && cursor < items.value.length) {
+      const item = items.value[cursor]
+      if (item.status === 'queued') start(item)
+      else cursor++
     }
   }
 
   function markSkipped(item: UploadItem) {
-    item.status = 'skipped'
+    setStatus(item, 'skipped')
     item.progress = 1
     item.errorSlug = undefined
     skipped.value++
@@ -207,7 +236,7 @@ export const useUploadsStore = defineStore('uploads', () => {
   }
 
   function start(item: UploadItem) {
-    item.status = 'uploading'
+    setStatus(item, 'uploading')
     // no se resetea progress: en un retry se reanuda desde el % ya subido
     let lastTs = 0
     const { promise, abort } = uploadFile(item.file, {
@@ -230,7 +259,7 @@ export const useUploadsStore = defineStore('uploads', () => {
           markSkipped(item)
           return
         }
-        item.status = 'done'
+        setStatus(item, 'done')
         item.progress = 1
         done.value++
         resumes.delete(item.id) // sesión ya consumida por complete
@@ -239,13 +268,13 @@ export const useUploadsStore = defineStore('uploads', () => {
         // cancel() marca ANTES de abortar; el rechazo del XHR llega después
         // y aquí se respeta — un abort jamás se disfraza de error
         if (item.status === 'canceled' || error instanceof UploadAbortError) {
-          item.status = 'canceled'
+          setStatus(item, 'canceled')
         } else if (error instanceof UploadSkippedError) {
           // ni se abrió sesión: el nombre ya estaba en la bandeja
           markSkipped(item)
         } else {
           // se CONSERVA la sesión (resumes) para reanudar en el retry
-          item.status = 'error'
+          setStatus(item, 'error')
           item.errorSlug = slugFor(error)
         }
       })
@@ -258,8 +287,7 @@ export const useUploadsStore = defineStore('uploads', () => {
 
   function checkDrain() {
     if (!active.value) return
-    const busy = items.value.some((i) => i.status === 'queued' || i.status === 'uploading')
-    if (busy) return
+    if (stats.queued > 0 || stats.uploading > 0) return
     active.value = false
     if (done.value > 0) {
       // el lote subió algo: refresh del input (ver drainHooks) + toast ok
@@ -284,14 +312,23 @@ export const useUploadsStore = defineStore('uploads', () => {
     if (!item || (item.status !== 'error' && item.status !== 'canceled')) return
     beginBatchIfDrained()
     joinBatch(item)
-    item.status = 'queued'
+    setStatus(item, 'queued')
     // no se resetea progress: el retry REANUDA desde el % ya subido
     item.errorSlug = undefined
     pump()
   }
 
+  // una sola pasada: encadenar retry(id) hacía un find() por cada fallido
   function retryFailed() {
-    for (const item of items.value.filter((i) => i.status === 'error')) retry(item.id)
+    if (stats.error === 0) return
+    beginBatchIfDrained()
+    for (const item of items.value) {
+      if (item.status !== 'error') continue
+      joinBatch(item)
+      setStatus(item, 'queued')
+      item.errorSlug = undefined
+    }
+    pump()
   }
 
   // libera la sesión de subida por trozos en el servidor (su .part, que con
@@ -311,21 +348,39 @@ export const useUploadsStore = defineStore('uploads', () => {
       // lote se devuelve (el slab no muestra fantasmas)
       dropSession(id)
       releaseObjectUrl(item)
+      stats.queued-- // sale de la lista entera, no cambia de estado
       items.value.splice(index, 1)
+      // el borrado corre los índices: el cursor apuntaría un item más allá
+      if (index < cursor) cursor--
       if (item.batch === batchSeq && total.value > 0) total.value--
       checkDrain()
     } else if (item.status === 'uploading') {
       // marcar ANTES de abortar (ver el catch de start)
-      item.status = 'canceled'
+      setStatus(item, 'canceled')
       aborts.get(id)?.()
       dropSession(id)
     }
   }
 
-  // acción de conjunto del resumen: suelta todo lo que aún no salió;
-  // lo que está en vuelo conserva su cancel individual
+  // acción de conjunto del resumen: suelta todo lo que aún no salió; lo que
+  // está en vuelo conserva su cancel individual. Una sola pasada — encadenar
+  // cancel(id) por item hacía findIndex+splice (y su reactividad) N veces.
   function cancelPending() {
-    for (const item of items.value.filter((i) => i.status === 'queued')) cancel(item.id)
+    if (stats.queued === 0) return
+    const keep: UploadItem[] = []
+    for (const item of items.value) {
+      if (item.status !== 'queued') {
+        keep.push(item)
+        continue
+      }
+      dropSession(item.id)
+      releaseObjectUrl(item)
+      stats.queued--
+      if (item.batch === batchSeq && total.value > 0) total.value--
+    }
+    items.value = keep
+    cursor = 0 // la lista se ha reconstruido: el cursor viejo ya no vale
+    checkDrain()
   }
 
   // limpia SOLO lo terminado-bien (done/skipped) y lo cancelado a propósito.
@@ -338,19 +393,14 @@ export const useUploadsStore = defineStore('uploads', () => {
       if (item.status === 'done' || item.status === 'canceled' || item.status === 'skipped') {
         releaseObjectUrl(item)
         resumes.delete(item.id)
+        stats[item.status]--
       } else {
         keep.push(item)
       }
     }
     items.value = keep
+    cursor = 0 // la lista se ha reconstruido: el cursor viejo ya no vale
   }
-
-  // contadores derivados para el resumen ("3 subiendo · 12 en cola · …")
-  const stats = computed(() => {
-    const s = { queued: 0, uploading: 0, done: 0, error: 0, canceled: 0, skipped: 0 }
-    for (const item of items.value) s[item.status]++
-    return s
-  })
 
   // iOS suspende los XHR al pasar a background: los interrumpidos aparecen
   // como error de RED (offline) al rechazarse su promesa. Al VOLVER a
@@ -362,7 +412,7 @@ export const useUploadsStore = defineStore('uploads', () => {
       if (item.status === 'error' && item.errorSlug === 'offline') {
         beginBatchIfDrained()
         joinBatch(item)
-        item.status = 'queued'
+        setStatus(item, 'queued')
         item.errorSlug = undefined
       }
     }

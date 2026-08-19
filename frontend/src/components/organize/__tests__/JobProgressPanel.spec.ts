@@ -163,8 +163,10 @@ describe('JobProgressPanel', () => {
     await nextTick()
 
     await wrapper.get('[data-testid="immich-skipped"]').trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.name).toBe('settings')
+    // /settings carga perezosa: la navegación acaba cuando resuelve su chunk
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.name).toBe('settings')
+    })
 
     await wrapper.get('[data-testid="job-organize-more"]').trigger('click')
     expect(organize.stage).toBe('compose')

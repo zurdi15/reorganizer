@@ -76,6 +76,7 @@ const label = computed(() => props.group.subfolder || t('organize.plan.rootGroup
           :src="inputThumbUrl(row.item.source_path)"
           alt=""
           loading="lazy"
+          decoding="async"
           class="h-8 w-8 shrink-0 rounded-xs border border-line object-cover"
           @error="markFailed(row.item.id)"
         />
