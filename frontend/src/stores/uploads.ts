@@ -36,10 +36,8 @@ export interface UploadItem {
   progress: number
   // slug i18n (errors.*) cuando status === 'error'
   errorSlug?: string
-  // miniatura SOLO para imágenes (URL.createObjectURL, revocada al salir de
-  // la lista); los vídeos van con icono + tamaño — extraer un frame en
-  // cliente costaría decodificar el vídeo en el móvil para nada
-  objectUrl?: string
+  // (la miniatura ya no vive aquí: la crea y la revoca la fila montada —
+  // con la lista virtualizada solo hay blob URLs de lo visible, no miles)
   // lote del slab al que pertenece (ver beginBatchIfDrained)
   batch: number
 }
@@ -172,12 +170,6 @@ export const useUploadsStore = defineStore('uploads', () => {
     total.value++
   }
 
-  function releaseObjectUrl(item: UploadItem) {
-    if (!item.objectUrl) return
-    URL.revokeObjectURL(item.objectUrl)
-    item.objectUrl = undefined
-  }
-
   // fuente única (picker, drag&drop, y en v1.1 Web Share Target): File[].
   // Empuja por TANDAS cediendo el hilo entre ellas: seleccionar cientos/miles
   // de ficheros ya no congela la UI (el freeze de "se queda pillado" al elegir
@@ -205,7 +197,6 @@ export const useUploadsStore = defineStore('uploads', () => {
           progress: 0,
           batch: batchSeq,
         }
-        if (item.kind === 'image') item.objectUrl = URL.createObjectURL(file)
         stats.queued++ // nace en cola (aún no está en la lista: sin setStatus)
         items.value.push(item)
       }
@@ -347,7 +338,6 @@ export const useUploadsStore = defineStore('uploads', () => {
       // nunca llegó a la red: fuera de la lista y su hueco del contador del
       // lote se devuelve (el slab no muestra fantasmas)
       dropSession(id)
-      releaseObjectUrl(item)
       stats.queued-- // sale de la lista entera, no cambia de estado
       items.value.splice(index, 1)
       // el borrado corre los índices: el cursor apuntaría un item más allá
@@ -374,7 +364,6 @@ export const useUploadsStore = defineStore('uploads', () => {
         continue
       }
       dropSession(item.id)
-      releaseObjectUrl(item)
       stats.queued--
       if (item.batch === batchSeq && total.value > 0) total.value--
     }
@@ -391,7 +380,6 @@ export const useUploadsStore = defineStore('uploads', () => {
     const keep: UploadItem[] = []
     for (const item of items.value) {
       if (item.status === 'done' || item.status === 'canceled' || item.status === 'skipped') {
-        releaseObjectUrl(item)
         resumes.delete(item.id)
         stats[item.status]--
       } else {

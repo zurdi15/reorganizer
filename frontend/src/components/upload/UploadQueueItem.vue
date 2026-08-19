@@ -4,7 +4,12 @@
 // truncado POR EL MEDIO (el final del nombre es lo que distingue los
 // sufijos numerados), tamaño humano, progreso por bytes y acciones SIEMPRE
 // visibles con diana ≥40px — nada solo-hover: esto se usa con el pulgar.
-import { computed } from 'vue'
+//
+// ALTO FIJO (ROW_HEIGHT_PX, borde incluido): la lista se virtualiza y la
+// ventana se calcula con aritmética de filas, así que una fila más alta que
+// otra desalinearía el scroll. Por eso cada línea de texto va truncada a una
+// sola: el nombre por el medio, el mensaje de estado con ellipsis.
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import RgButton from '@/lib/RgButton.vue'
@@ -17,6 +22,17 @@ const props = defineProps<{ item: UploadItem }>()
 const emit = defineEmits<{ retry: [id: number]; cancel: [id: number] }>()
 
 const { t, te } = useI18n()
+
+// La miniatura la crea y la LIBERA esta fila, no el store: con la lista
+// virtualizada solo hay ~20 filas montadas, así que en vez de miles de blob
+// URLs vivas a la vez (un lote de 2000 fotos las tenía todas) hay las de la
+// ventana visible. Vue no proxifica un File, así que item.file es el original.
+const objectUrl = ref<string | undefined>(
+  props.item.kind === 'image' ? URL.createObjectURL(props.item.file) : undefined,
+)
+onBeforeUnmount(() => {
+  if (objectUrl.value) URL.revokeObjectURL(objectUrl.value)
+})
 
 // (ya no hay aviso de "archivo grande": la subida por trozos reanudable hace
 // que los archivos de varios GB suban de forma fiable — el tamaño se muestra
@@ -31,14 +47,17 @@ const errorText = computed(() => {
 </script>
 
 <template>
-  <li class="rg-cv-row flex items-center gap-3 py-2" :data-status="item.status">
+  <li
+    class="flex h-18 items-center gap-3 border-b border-line last:border-b-0"
+    :data-status="item.status"
+  >
     <!-- miniatura 56px: imagen real solo si hay objectURL (kind image) -->
     <div
       class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-line bg-stone"
     >
       <img
-        v-if="item.objectUrl"
-        :src="item.objectUrl"
+        v-if="objectUrl"
+        :src="objectUrl"
         alt=""
         loading="lazy"
         decoding="async"
@@ -59,14 +78,14 @@ const errorText = computed(() => {
       <p class="rg-metric truncate text-sm text-ink" :title="item.name" data-testid="item-name">
         {{ shownName }}
       </p>
-      <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-        <span class="rg-metric">{{ formatBytes(item.size) }}</span>
-        <span v-if="item.status === 'canceled'" class="text-ink-faint" data-testid="item-canceled">
+      <div class="mt-0.5 flex items-center gap-2 text-xs text-ink-muted">
+        <span class="rg-metric shrink-0">{{ formatBytes(item.size) }}</span>
+        <span v-if="item.status === 'canceled'" class="truncate text-ink-faint" data-testid="item-canceled">
           {{ t('upload.queue.canceled') }}
         </span>
         <!-- saltado: no se subió porque ese nombre ya estaba en la bandeja
              (ajuste de duplicados de subida) — informativo, no un error -->
-        <span v-else-if="item.status === 'skipped'" class="text-ink-faint" data-testid="item-skipped">
+        <span v-else-if="item.status === 'skipped'" class="truncate text-ink-faint" data-testid="item-skipped">
           {{ t('upload.queue.skipped') }}
         </span>
       </div>
@@ -75,7 +94,13 @@ const errorText = computed(() => {
         class="mt-1.5"
         :value="item.progress * 100"
       />
-      <p v-else-if="item.status === 'error'" class="mt-0.5 text-xs text-danger" data-testid="item-error">
+      <!-- una línea (el alto de la fila es fijo); el texto completo en title -->
+      <p
+        v-else-if="item.status === 'error'"
+        class="mt-0.5 truncate text-xs text-danger"
+        :title="errorText"
+        data-testid="item-error"
+      >
         {{ errorText }}
       </p>
     </div>

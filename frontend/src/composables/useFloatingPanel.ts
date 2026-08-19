@@ -51,13 +51,19 @@ export function useFloatingPanel() {
   // esto, cada evento de scroll medía (getBoundingClientRect) y escribía
   // estilos — layout forzado a la cadencia del dedo mientras hay un panel
   // abierto.
+  // el candado es `scheduled`, no el id del frame: con un rAF síncrono el id se
+  // asignaría después de limpiarlo y esto se quedaría mudo (ver useVirtualRows)
+  let scheduled = false
   let frame = 0
+  function runRecompute() {
+    scheduled = false
+    if (open.value) recomputePosition()
+  }
+
   function scheduleRecompute() {
-    if (frame) return
-    frame = requestAnimationFrame(() => {
-      frame = 0
-      if (open.value) recomputePosition()
-    })
+    if (scheduled) return
+    scheduled = true
+    frame = requestAnimationFrame(runRecompute)
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -112,9 +118,9 @@ export function useFloatingPanel() {
     window.removeEventListener('pointerdown', onPointerDown)
     window.removeEventListener('resize', scheduleRecompute)
     window.removeEventListener('scroll', scheduleRecompute, true)
-    if (frame) {
+    if (scheduled) {
       cancelAnimationFrame(frame)
-      frame = 0
+      scheduled = false
     }
   }
 

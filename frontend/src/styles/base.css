@@ -72,14 +72,12 @@ html.rg-light {
 }
 
 /* content-visibility: el navegador SALTA el layout/paint de lo que está fuera
-   de pantalla en listas largas (cola de subidas, grid del input) — el gran
-   ahorro de render al scrollear cientos de elementos. contain-intrinsic-size
-   con `auto` recuerda el tamaño ya medido; el segundo valor es la estimación
-   inicial para que la barra de scroll no salte antes del primer render. */
-.rg-cv-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 72px;
-}
+   de pantalla en la grid del input — el gran ahorro de render al scrollear
+   cientos de tarjetas. contain-intrinsic-size con `auto` recuerda el tamaño ya
+   medido; el segundo valor es la estimación inicial para que la barra de
+   scroll no salte antes del primer render.
+   (La cola de subidas ya no lo necesita: está virtualizada, así que solo
+   monta las filas visibles — ver useVirtualRows.) */
 .rg-cv-card {
   content-visibility: auto;
   /* tarjeta cuadrada de la grid: alto ≈ ancho de columna; `auto` lo afina tras

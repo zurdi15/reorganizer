@@ -164,9 +164,13 @@ describe('JobProgressPanel', () => {
 
     await wrapper.get('[data-testid="immich-skipped"]').trigger('click')
     // /settings carga perezosa: la navegación acaba cuando resuelve su chunk
-    await vi.waitFor(() => {
-      expect(router.currentRoute.value.name).toBe('settings')
-    })
+    await vi.waitFor(
+      () => {
+        expect(router.currentRoute.value.name).toBe('settings')
+      },
+      // el chunk de la vista se transforma la primera vez: 1s se queda corto
+      { timeout: 5000 },
+    )
 
     await wrapper.get('[data-testid="job-organize-more"]').trigger('click')
     expect(organize.stage).toBe('compose')

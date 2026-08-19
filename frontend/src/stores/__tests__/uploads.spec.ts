@@ -83,7 +83,9 @@ describe('stores/uploads', () => {
     vi.restoreAllMocks()
   })
 
-  it('enqueue maps kind from the MIME type and creates objectURLs only for images', () => {
+  // la miniatura ya NO la crea el store: la fila montada es su dueña (ver
+  // UploadQueueItem), así el lote de 2000 fotos no deja 2000 blob URLs vivas
+  it('enqueue maps kind from the MIME type without touching object URLs', () => {
     const store = useUploadsStore()
     store.enqueue([
       makeFile('a.jpg', 'image/jpeg'),
@@ -91,9 +93,7 @@ describe('stores/uploads', () => {
       makeFile('c.txt', 'text/plain'),
     ])
     expect(store.items.map((i) => i.kind)).toEqual(['image', 'video', 'other'])
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
-    expect(store.items[0].objectUrl).toBe('blob:mock-1')
-    expect(store.items[1].objectUrl).toBeUndefined()
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
 
   it('honors UPLOAD_CONCURRENCY=2 and pumps the next queued file on each settle', async () => {
@@ -201,7 +201,7 @@ describe('stores/uploads', () => {
     expect(store.items.map((i) => i.errorSlug)).toEqual([undefined, undefined])
   })
 
-  it('cancel() on a queued item drops it, revokes its objectURL and returns its batch slot', () => {
+  it('cancel() on a queued item drops it and returns its batch slot', () => {
     const store = useUploadsStore()
     store.enqueue([makeFile('a.jpg'), makeFile('b.jpg'), makeFile('c.jpg')])
     const queued = store.items[2]
@@ -209,7 +209,6 @@ describe('stores/uploads', () => {
 
     store.cancel(queued.id)
     expect(store.items).toHaveLength(2)
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-3')
     expect(store.total).toBe(2)
   })
 
@@ -240,7 +239,7 @@ describe('stores/uploads', () => {
     expect(mocked.calls.every((c) => !c.abortCalled)).toBe(true)
   })
 
-  it('clearFinished() removes terminal items and revokes their objectURLs, keeping active ones', async () => {
+  it('clearFinished() removes terminal items, keeping active ones', async () => {
     const store = useUploadsStore()
     store.enqueue([makeFile('a.jpg'), makeFile('b.jpg')])
     mocked.calls[0].resolve([])
@@ -250,8 +249,6 @@ describe('stores/uploads', () => {
     store.clearFinished()
     expect(store.items).toHaveLength(1)
     expect(store.items[0].status).toBe('uploading')
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-1')
-    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:mock-2')
   })
 
   it('clearFinished() KEEPS failed items so they can still be retried', async () => {
@@ -319,7 +316,6 @@ describe('stores/uploads', () => {
 
     store.clearFinished()
     expect(store.items.map((i) => i.status)).toEqual(['error'])
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-1')
   })
 
   // Los contadores del resumen se MANTIENEN en cada transición (antes se

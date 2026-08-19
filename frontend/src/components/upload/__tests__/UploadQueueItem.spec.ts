@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import UploadQueueItem from '../UploadQueueItem.vue'
 import { createI18nInstance } from '@/i18n'
@@ -27,14 +27,35 @@ function mountItem(overrides: Partial<UploadItem> = {}) {
 }
 
 describe('UploadQueueItem', () => {
-  it('renders the objectURL thumb for images and the human size', () => {
-    const wrapper = mountItem({ objectUrl: 'blob:mock-1' })
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:mock-1')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  // la fila es la DUEÑA de la miniatura: la crea al montarse y la revoca al
+  // desmontarse. Con la lista virtualizada eso acota las blob URLs vivas a las
+  // filas visibles en vez de tener una por archivo de la cola.
+  it('creates its own objectURL thumb for images and revokes it on unmount', () => {
+    const wrapper = mountItem()
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
     expect(wrapper.get('[data-testid="item-thumb"]').attributes('src')).toBe('blob:mock-1')
     expect(wrapper.text()).toContain('1 KB')
+
+    wrapper.unmount()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-1')
+  })
+
+  // el alto de la fila es FIJO y la virtualización de la cola cuenta con ese
+  // número exacto (ROW_HEIGHT_PX en UploadView): si alguien cambia la clase,
+  // este test lo caza antes de que el scroll se desalinee
+  it('keeps the fixed row height the virtualizer assumes (h-18 = 72px)', () => {
+    const classes = mountItem().get('li').classes()
+    expect(classes).toContain('h-18')
   })
 
   it('renders an icon glyph (no client frame extraction) for videos', () => {
     const wrapper = mountItem({ kind: 'video', name: 'clip.mp4' })
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="item-thumb"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="item-glyph"]').exists()).toBe(true)
   })

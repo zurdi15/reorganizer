@@ -122,9 +122,12 @@ describe('InputGrid', () => {
     await action.trigger('click')
     // /upload es una ruta con carga perezosa: la navegación no termina hasta
     // que su chunk resuelve (por eso waitFor y no un solo flush)
-    await vi.waitFor(() => {
-      expect(router.currentRoute.value.name).toBe('upload')
-    })
+    await vi.waitFor(
+      () => {
+        expect(router.currentRoute.value.name).toBe('upload')
+      },
+      { timeout: 5000 },
+    )
   })
 
   it('the refresh button re-requests the three input reads', async () => {
