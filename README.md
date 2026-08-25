@@ -5,7 +5,7 @@
 <h1 align="center">Reorganizer</h1>
 
 <p align="center">
-  Organiza tus fotos y vídeos en una estructura propia.
+  Organize your photos and videos in your own structure.
 </p>
 
 <p align="center">
@@ -13,119 +13,119 @@
   <a href="https://github.com/zurdi15/reorganizer/releases"><img src="https://img.shields.io/github/v/release/zurdi15/reorganizer?sort=semver" alt="Release" /></a>
 </p>
 
-Frontal web self-hosted para organizar fotos y vídeos. Subes archivos (desde el
-móvil o el navegador), eliges una carpeta destino, y Reorganizer los clasifica y
-mueve a una estructura de carpetas bajo tu librería — pensado para que
-[Immich](https://immich.app) la escanee como **librería externa** manteniendo tu
-estructura en disco.
+Self-hosted web frontend to organize photos and videos. You upload files (from
+your phone or browser), choose a destination folder, and Reorganizer classifies
+and moves them into a folder structure under your library — designed so
+[Immich](https://immich.app) can scan it as an **external library** while keeping
+your on-disk structure.
 
-- 📱 **PWA instalable** (Android e iOS): subida multi-selección desde la galería
-  con progreso por archivo. 100% responsive, mobile-first.
-- ⬆️ **Subidas grandes (varios GB) reanudables**: se trocean en el cliente y se
-  suben por partes; un corte de red o el móvil pasando a segundo plano no tira
-  la subida — se reanuda desde el último trozo confirmado. Los trozos pequeños
-  esquivan límites de tamaño del reverse proxy/ingress.
-- 🔁 **Sin duplicados al subir**: si el archivo ya está en la bandeja por
-  nombre, se salta (por defecto) en vez de guardarlo como `foto (1).jpg` — y
-  ni se suben sus bytes. Configurable en Ajustes (saltar / renombrar).
-- 🗂️ **Ruta destino libre**: `2025/08/croacia`, `2025/diario`, lo que quieras.
-  El EXIF sugiere año/mes del lote; tú compones la ruta con autocompletado del
-  árbol existente. Nunca se fuerza una estructura.
-- ⚙️ **Reglas de clasificación configurables** (editor en Ajustes): por tipo,
-  orientación, patrón de nombre o cámara. Por defecto reproduce
-  `photo/` + `video/{horizontal|vertical}/{phone|dron/mini3}` con la detección
-  DJI arreglada (funciona con `DJI_0001.MP4` y con metadata de cámara).
-- 🔍 **Dry-run siempre**: primero se planifica (leyendo EXIF/ffprobe de cada
-  archivo) y ves el plan completo — avisos de duplicados y de archivos sin
-  regla (`_unknown/`) — antes de ejecutar.
-- 🔁 **Jobs persistentes** (SQLite): historial con resultado por archivo,
-  cancelación, recuperación tras reinicio, progreso en vivo por WebSocket.
-- 🧬 **Duplicados con cabeza**: si el destino ya tiene un archivo idéntico
-  (hash), en modo mover se limpia del input; si difiere, eliges estrategia
-  (renombrar / saltar / sobrescribir).
-- 📸 **Immich**: al terminar un job lanza el escaneo de tu librería externa vía
-  API (URL + API key en Ajustes, con test de conexión y selector de librería).
+- 📱 **Installable PWA** (Android and iOS): multi-select uploads from the gallery
+  with per-file progress. 100% responsive, mobile-first.
+- ⬆️ **Large resumable uploads (multiple GB)**: files are chunked on the client
+  and uploaded in parts; a network drop or your phone going to the background
+  does not kill the upload — it resumes from the last confirmed chunk. Small
+  chunks avoid reverse proxy/ingress size limits.
+- 🔁 **No duplicate uploads**: if the file already exists in the inbox by name,
+  it is skipped (by default) instead of being saved as `photo (1).jpg` — and
+  its bytes are not uploaded. Configurable in Settings (skip / rename).
+- 🗂️ **Free destination path**: `2025/08/croatia`, `2025/diary`, whatever you want.
+  EXIF suggests year/month for the batch; you compose the path with
+  autocompletion from the existing tree. No structure is ever forced.
+- ⚙️ **Configurable classification rules** (editor in Settings): by type,
+  orientation, filename pattern, or camera. By default it reproduces
+  `photo/` + `video/{horizontal|vertical}/{phone|drone/mini3}` with fixed DJI
+  detection (works with `DJI_0001.MP4` and camera metadata).
+- 🔍 **Always dry-run first**: first it plans (reading EXIF/ffprobe for each
+  file) and you can see the full plan — duplicate warnings and files without a
+  rule (`_unknown/`) — before executing.
+- 🔁 **Persistent jobs** (SQLite): history with per-file result, cancellation,
+  recovery after restart, live progress over WebSocket.
+- 🧬 **Smart duplicate handling**: if the destination already has an identical
+  file (hash), move mode removes it from input; if it differs, you choose the
+  strategy (rename / skip / overwrite).
+- 📸 **Immich**: when a job finishes, it triggers scanning of your external
+  library through the API (URL + API key in Settings, with connection test and
+  library selector).
 
-## Arranque rápido (Docker)
+## Quick start (Docker)
 
 ```yaml
-# docker-compose.yml — ver docker-compose.example.yml para el archivo completo
+# docker-compose.yml — see docker-compose.example.yml for the full file
 services:
   reorganizer:
     image: ghcr.io/zurdi15/reorganizer:latest
     ports: ["8000:8000"]
     environment:
-      PUID: 1000   # uid propietario de tus carpetas de media
+      PUID: 1000   # owner uid of your media folders
       PGID: 1000
     volumes:
-      - ./data:/data                       # DB + caché de miniaturas
-      - /ruta/a/subidas:/input             # bandeja de entrada
-      - /ruta/a/libreria:/output           # tu librería (la que escanea Immich)
+      - ./data:/data                       # DB + thumbnail cache
+      - /path/to/uploads:/input            # input tray
+      - /path/to/library:/output           # your library (the one Immich scans)
     restart: unless-stopped
 ```
 
-El contenedor arranca como root solo para ajustar el usuario interno a
-`PUID/PGID` y cede privilegios (`gosu`) antes de ejecutar la app. Nunca hace
-`chown` de `/input` ni `/output`: pon `PUID/PGID` con el dueño real de tus
-carpetas. Alternativa pure-non-root: `user: "1000:1000"` en compose (entonces
-`/data` debe ser escribible por ese uid de antemano).
+The container starts as root only to align the internal user with `PUID/PGID`,
+then drops privileges (`gosu`) before running the app. It never runs `chown` on
+`/input` or `/output`: set `PUID/PGID` to the real owner of your folders.
+Pure non-root alternative: `user: "1000:1000"` in compose (then `/data` must be
+writable by that uid in advance).
 
-### Variables de entorno
+### Environment variables
 
-| Variable | Default | Descripción |
+| Variable | Default | Description |
 |---|---|---|
-| `RG_DATA_DIR` | `/data` | SQLite + miniaturas |
-| `RG_INPUT_DIR` | `/input` | Bandeja de entrada |
-| `RG_OUTPUT_DIR` | `/output` | Librería destino |
-| `RG_MAX_UPLOAD_MB` | `10240` | Límite por archivo subido (10 GiB) |
-| `RG_SERVE_STATIC` | `true` | Servir la SPA (desactivar solo en dev) |
-| `PUID` / `PGID` | `1000` | Dueño efectivo del proceso (solo Docker) |
+| `RG_DATA_DIR` | `/data` | SQLite + thumbnails |
+| `RG_INPUT_DIR` | `/input` | Input tray |
+| `RG_OUTPUT_DIR` | `/output` | Destination library |
+| `RG_MAX_UPLOAD_MB` | `10240` | Per-uploaded-file limit (10 GiB) |
+| `RG_SERVE_STATIC` | `true` | Serve the SPA (disable only in dev) |
+| `PUID` / `PGID` | `1000` | Effective process owner (Docker only) |
 
-La configuración de Immich, los duplicados al subir y los defaults de
-duplicados/transferencia al organizar viven en la base de datos y se editan
-desde **Ajustes** en la propia app.
+Immich settings, upload-duplicate behavior, and organizer transfer/duplicate
+defaults are stored in the database and edited from **Settings** in the app.
 
 ## Immich
 
-1. En Immich, crea una **librería externa** apuntando a la misma ruta que
-   montas en `/output`.
-2. Genera una API key de un usuario **administrador** (el endpoint de escaneo
-   lo exige).
-3. En Reorganizer → Ajustes → Immich: URL, API key, «Probar conexión» y elige
-   la librería. Con el toggle activado, cada job terminado lanza el escaneo.
+1. In Immich, create an **external library** pointing to the same path you mount
+   at `/output`.
+2. Generate an API key for an **administrator** user (the scan endpoint requires
+   it).
+3. In Reorganizer → Settings → Immich: URL, API key, "Test connection", and
+   select the library. With the toggle enabled, each completed job triggers
+   scanning.
 
-## Sin autenticación — léelo
+## No authentication — read this
 
-Reorganizer **no tiene login**: cualquiera que alcance el puerto puede ver y
-mover tus archivos. Exponlo solo en LAN/VPN (Tailscale, WireGuard) o detrás de
-un reverse proxy con autenticación (Authelia, basic auth…). Si usas proxy,
-necesita soporte de **upgrade WebSocket** para `/api/v1/ws`. Las subidas grandes
-van por trozos (peticiones pequeñas), así que no hace falta subir el límite de
-tamaño del cuerpo; solo si además usas la subida en un único POST (`POST
-/uploads`, para curl/scripts) conviene:
+Reorganizer **has no login**: anyone who can reach the port can view and move
+your files. Expose it only on LAN/VPN (Tailscale, WireGuard) or behind a reverse
+proxy with authentication (Authelia, basic auth…). If you use a proxy, it needs
+**WebSocket upgrade** support for `/api/v1/ws`. Large uploads use chunks (small
+requests), so you do not need to raise body size limits; only if you also use
+single-POST upload (`POST /uploads`, for curl/scripts), then consider:
 
 ```nginx
-client_max_body_size 0;          # o >= RG_MAX_UPLOAD_MB (solo el POST único)
+client_max_body_size 0;          # or >= RG_MAX_UPLOAD_MB (single POST only)
 proxy_request_buffering off;
 ```
 
-## Desarrollo
+## Development
 
-Requisitos: `uv`, Node 22+, `ffmpeg` (ffprobe) en el PATH.
+Requirements: `uv`, Node 22+, `ffmpeg` (ffprobe) in PATH.
 
 ```bash
-./dev.sh all     # backend :8000 + Vite :5173 (trabaja siempre en :5173)
-./dev.sh back    # solo backend (crea ./data/{input,output})
-./dev.sh front   # solo frontend
+./dev.sh all     # backend :8000 + Vite :5173 (always work on :5173)
+./dev.sh back    # backend only (creates ./data/{input,output})
+./dev.sh front   # frontend only
 ```
 
-- Backend: FastAPI + SQLAlchemy 2 + Alembic (`backend/`, tests con
+- Backend: FastAPI + SQLAlchemy 2 + Alembic (`backend/`, tests with
   `uv run pytest`).
-- Frontend: Vue 3 + Vite 7 + Tailwind 4 con design system propio y tokens
-  generados (`frontend/`, tests con `npm test`; `npm run build` incluye los
-  guards de tokens).
-- API docs en `http://localhost:8000/api/docs`.
+- Frontend: Vue 3 + Vite 7 + Tailwind 4 with custom design system and generated
+  tokens (`frontend/`, tests with `npm test`; `npm run build` includes token
+  guards).
+- API docs at `http://localhost:8000/api/docs`.
 
-## Licencia
+## License
 
-Uso personal. Repo: [zurdi15/reorganizer](https://github.com/zurdi15/reorganizer).
+Personal use. Repo: [zurdi15/reorganizer](https://github.com/zurdi15/reorganizer).
