@@ -31,7 +31,7 @@ Reorganizer is a self-hosted web frontend to organize photos and videos. You upl
 <!-- Screenshots: drop PNGs into docs/screenshots/ and uncomment this section.
 ## Screenshots
 
-<table>
+<table align="center">
   <tr>
     <td><img src="docs/screenshots/mobile-upload.png" width="240" alt="Upload: multi-select from the gallery with per-file progress"></td>
     <td><img src="docs/screenshots/mobile-plan.png" width="240" alt="Plan: dry-run with duplicate warnings and unmatched files"></td>
