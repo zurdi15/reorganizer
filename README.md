@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/zurdi15/reorganizer/actions/workflows/ci.yml"><img src="https://github.com/zurdi15/reorganizer/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI" /></a>
+  <a href="https://github.com/zurdi15/reorganizer/actions/workflows/ci.yml"><img src="https://github.com/zurdi15/reorganizer/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
   <a href="https://github.com/zurdi15/reorganizer/releases"><img src="https://img.shields.io/github/v/release/zurdi15/reorganizer?sort=semver" alt="Release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/zurdi15/reorganizer" alt="License" /></a>
 </p>
